@@ -9,4 +9,5 @@ before_script:
 - docker pull benjaminbrelje/mdolabfull:latest
 
 script:
+- env | sort
 - bash run_tests.bash
