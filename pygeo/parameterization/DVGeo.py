@@ -588,7 +588,7 @@ class DVGeometry:
 
         return nAxis
 
-    def addPointSet(self, points, ptName, origConfig=True, **kwargs):
+    def addPointSet(self, points, ptName, origConfig=True, embTol=1e-10, nIter=100, eps=1e-12, **kwargs):
         """
         Add a set of coordinates to DVGeometry
 
@@ -613,8 +613,6 @@ class DVGeometry:
 
         """
 
-        embTol = kwargs.get("embTol", 1e-10)  # see pyBlock.attachPoints() documentation
-
         # save this name so that we can zero out the jacobians properly
         self.ptSetNames.append(ptName)
         self.zeroJacobians([ptName])
@@ -631,9 +629,9 @@ class DVGeometry:
 
         # Project the last set of points into the volume
         if self.isChild:
-            self.FFD.attachPoints(self.points[ptName], ptName, interiorOnly=True, embTol=embTol, **kwargs)
+            self.FFD.attachPoints(self.points[ptName], ptName, interiorOnly=True, embTol=embTol, nIter=nIter, eps=eps)
         else:
-            self.FFD.attachPoints(self.points[ptName], ptName, interiorOnly=False, embTol=embTol, **kwargs)
+            self.FFD.attachPoints(self.points[ptName], ptName, interiorOnly=False, embTol=embTol, nIter=nIter, eps=eps)
 
         if origConfig:
             self.FFD.coef = tmpCoef

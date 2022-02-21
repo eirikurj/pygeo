@@ -772,7 +772,7 @@ class pyBlock:
     #             Embedded Geometry Functions
     # ----------------------------------------------------------------------
 
-    def attachPoints(self, coordinates, ptSetName, interiorOnly=False, embTol=1e-10, **kwargs):
+    def attachPoints(self, coordinates, ptSetName, interiorOnly=False, embTol=1e-10, nIter=100, eps=1e-12):
         """Embed a set of coordinates into the volumes. This is the
         main high level function that is used by DVGeometry when
         pyBlock is used as an FFD.
@@ -791,10 +791,6 @@ class pyBlock:
         kwargs : dict
             kwargs pass through to the actual projectPoints() function
         """
-
-        # Unpack kwargs
-        nIter = kwargs.get("nIter", 100)
-        eps = kwargs.get("eps", 1e-12)
 
         # Project Points, if some were actually passed in:
         if coordinates is not None:
