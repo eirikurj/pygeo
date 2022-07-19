@@ -99,7 +99,6 @@ class AreaMomentsConstraint(GeometricConstraint):
               /                        /
         """
         # EJ-: This function should be generalized, such that different approximations can be used. Also, should refactor to include geometric objects.
-        # GN: What is meant by geometric objects? Also, this only works for solid sections, right?
 
         # Initialize output
         Ixx = 0
@@ -230,7 +229,6 @@ class AreaMomentsConstraint(GeometricConstraint):
             y_botb = np.zeros_like(y_bot)
             y_topb = np.zeros_like(y_top)
 
-            # GN: I don't know what's going on here
             self._evalAreaMomentsSection_b(x_bot, x_botb, y_top, y_topb, y_bot, y_botb, Ixxb, Iyyb, Jzb)
 
             # Set the derivatives in the global coordinate array for this slice
