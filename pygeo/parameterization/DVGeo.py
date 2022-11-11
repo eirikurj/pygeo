@@ -67,18 +67,18 @@ class DVGeometry(BaseDVGeometry):
 
     name : str
         This is prepended to every DV name for ensuring design variables names are
-        unique to pyOptsparse. Only useful when using multiple DVGeos with
-        TriangulatedSurfaceConstraint()
+        unique to pyOptSparse. Only useful when using multiple DVGeos with
+        :meth:`.addTriangulatedSurfaceConstraint()`
 
     kmax : int
-        maximum order of the splines used for the underlying formulation.
+        Maximum order of the splines used for the underlying formulation.
         Default is a 4th order spline in each direction if the dimensions
         allow.
 
     Examples
     --------
     The general sequence of operations for using DVGeometry is as follows::
-      >>> from pygeo import *
+      >>> from pygeo import DVGeometry
       >>> DVGeo = DVGeometry('FFD_file.fmt')
       >>> # Embed a set of coordinates Xpt into the object
       >>> DVGeo.addPointSet(Xpt, 'myPoints')
@@ -91,7 +91,6 @@ class DVGeometry(BaseDVGeometry):
       >>> DVGeo.addGlobalDV('wing_twist', 0.0, twist, lower=-10, upper=10)
       >>> # Now add local (shape) variables
       >>> DVGeo.addLocalDV('shape', lower=-0.5, upper=0.5, axis='y')
-      >>>
     """
 
     def __init__(self, fileName, *args, isComplex=False, child=False, faceFreeze=None, name=None, kmax=4, **kwargs):
@@ -130,7 +129,7 @@ class DVGeometry(BaseDVGeometry):
         # Load the FFD file in FFD mode. Also note that args and
         # kwargs are passed through in case additional pyBlock options
         # need to be set.
-        self.FFD = pyBlock("plot3d", fileName=fileName, FFD=True, kmax=kmax, *args, **kwargs)
+        self.FFD = pyBlock("plot3d", fileName=fileName, FFD=True, kmax=kmax, **kwargs)
         self.origFFDCoef = self.FFD.coef.copy()
 
         self.coef = None
@@ -171,6 +170,9 @@ class DVGeometry(BaseDVGeometry):
         # Jacobians:
         self.JT = {}
         self.nPts = {}
+
+        # dictionary to save any coordinate transformations we are given
+        self.coord_xfer = {}
 
         # Derivatives of Xref and Coef provided by the parent to the
         # children
@@ -287,7 +289,24 @@ class DVGeometry(BaseDVGeometry):
             Supply exactly the desired reference axis
 
         xFraction : float
-            Specify the stream-wise extent
+            Specify the parametric stream-wise (axis: 0) location of the reference axis node relative to
+            front and rear control points location. Constant for every spanwise section.
+
+        yFraction : float
+            Specify the parametric location of the reference axis node along axis: 1 relative to
+            top and bottom control points location. Constant for every spanwise section.
+
+            .. note::
+                if this is the spanwise axis of the FFD box, the refAxis node will remain in-plane
+                and the option will not have any effect.
+
+        zFraction : float
+            Specify the parametric location of the reference axis node along axis: 2 relative to
+            top and bottom control points location. Constant for every spanwise section.
+
+            .. note::
+                if this is the spanwise axis of the FFD box, the refAxis node will remain in-plane
+                and the option will not have any effect.
 
         volumes : list or array or integers
             List of the volume indices, in 0-based ordering that this
@@ -415,10 +434,13 @@ class DVGeometry(BaseDVGeometry):
                 for volume in volumes:
                     volumesSymm.append(volume + self.FFD.nVol / 2)
 
-                curveSymm = copy.deepcopy(curve)
-                curveSymm.reverse()
-                for _coef in curveSymm.coef:
-                    curveSymm.coef[:, index] = -curveSymm.coef[:, index]
+                # We want to create a curve that is symmetric of the current one
+                symm_curve_X = curve.X.copy()
+
+                # flip the coefs
+                symm_curve_X[:, index] = -symm_curve_X[:, index]
+                curveSymm = Curve(k=curve.k, X=symm_curve_X)
+
                 self.axis[name] = {
                     "curve": curve,
                     "volumes": volumes,
@@ -587,9 +609,39 @@ class DVGeometry(BaseDVGeometry):
         # Add the raySize multiplication factor for this axis
         self.axis[name]["raySize"] = raySize
 
+        # do the same for the other half if we have a symmetry plane
+        if self.FFD.symmPlane is not None:
+            # we need to figure out the correct indices to ignore for the mirrored FFDs
+
+            # first get the matching indices between the current and mirroring FFDs.
+            # we want to include the the nodes on the symmetry plane.
+            # these will appear as the same indices on FFDs on both sides
+            indSetA, indSetB = self.getSymmetricCoefList(getSymmPlane=True)
+
+            # loop over the inds_to_ignore list and find the corresponding symmetries
+            ignoreIndSymm = []
+            for ind in ignoreInd:
+                try:
+                    tmp = indSetA.index(ind)
+                except ValueError:
+                    raise Error(
+                        f"""The index {ind} is not in indSetA. This is likely due to a weird
+                        issue caused by the point reduction routines during initialization.
+                        Reduce the offset of the FFD control points from the symmetry plane
+                        to avoid it. The max deviation from the symmetry plane needs to be
+                        less than around 1e-5 if rest of the default tolerances in pygeo is used."""
+                    )
+                ind_mirror = indSetB[tmp]
+                ignoreIndSymm.append(ind_mirror)
+
+            self.axis[name + "Symm"]["ignoreInd"] = ignoreIndSymm
+
+            # we just take the same raySize as the original curve
+            self.axis[name + "Symm"]["raySize"] = raySize
+
         return nAxis
 
-    def addPointSet(self, points, ptName, origConfig=True, **kwargs):
+    def addPointSet(self, points, ptName, origConfig=True, coord_xfer=None, **kwargs):
         """
         Add a set of coordinates to DVGeometry
 
@@ -611,6 +663,72 @@ class DVGeometry(BaseDVGeometry):
             undeformed or deformed configuration. This should almost
             always be True except in circumstances when the user knows
             exactly what they are doing.
+        coord_xfer : function
+            A callback function that performs a coordinate transformation
+            between the DVGeo reference frame and any other reference
+            frame. The DVGeo object uses this routine to apply the coordinate
+            transformation in "forward" and "reverse" directions to go between
+            the two reference frames. Derivatives are also adjusted since they
+            are vectors coming into DVGeo (in the reverse AD mode)
+            and need to be rotated. We have a callback function here that lets
+            the user to do whatever they want with the coordinate transformation.
+            The function must have the first positional argument as the array that is
+            (npt, 3) and the two keyword arguments that must be available are "mode"
+            ("fwd" or "bwd") and "apply_displacement" (True or False). This function
+            can then be passed to DVGeo through something like ADflow, where the
+            set DVGeo call can be modified as:
+            CFDSolver.setDVGeo(DVGeo, pointSetKwargs={"coord_xfer": coord_xfer})
+
+            An example function is as follows:
+
+            .. code-block:: python
+
+                def coord_xfer(coords, mode="fwd", apply_displacement=True, **kwargs):
+                    # given the (npt by 3) array "coords" apply the coordinate transformation.
+                    # The "fwd" mode implies we go from DVGeo reference frame to the
+                    # application, e.g. CFD, the "bwd" mode is the opposite;
+                    # goes from the CFD reference frame back to the DVGeo reference frame.
+                    # the apply_displacement flag needs to be correctly implemented
+                    # by the user; the derivatives are also passed through this routine
+                    # and they only need to be rotated when going between reference frames,
+                    # and they should NOT be displaced.
+
+                    # In summary, all the displacements MUST be within the if apply_displacement == True
+                    # checks, otherwise the derivatives will be wrong.
+
+                    #  Example transfer: The CFD mesh
+                    # is rotated about the x-axis by 90 degrees with the right hand rule
+                    # and moved 5 units below (in z) the DVGeo reference.
+                    # Note that the order of these operations is important.
+
+                    # a different rotation matrix can be created during the creation of
+                    # this function. This is a simple rotation about x-axis.
+                    # Multiple rotation matrices can be used; the user is completely free
+                    # with whatever transformations they want to apply here.
+                    rot_mat = np.array([
+                        [1, 0, 0],
+                        [0, 0, -1],
+                        [0, 1, 0],
+                    ])
+
+                    if mode == "fwd":
+                        # apply the rotation first
+                        coords_new = np.dot(coords, rot_mat)
+
+                        # then the translation
+                        if apply_displacement:
+                            coords_new[:, 2] -= 5
+                    elif mode == "bwd":
+                        # apply the operations in reverse
+                        coords_new = coords.copy()
+                        if apply_displacement:
+                            coords_new[:, 2] += 5
+
+                        # and the rotation. note the rotation matrix is transposed
+                        # for switching the direction of rotation
+                        coords_new = np.dot(coords_new, rot_mat.T)
+
+                    return coords_new
 
         """
 
@@ -623,6 +741,17 @@ class DVGeometry(BaseDVGeometry):
         self.nPts[ptName] = None
 
         points = np.array(points).real.astype("d")
+
+        # save the coordinate transformation info
+        if coord_xfer is not None:
+            self.coord_xfer[ptName] = coord_xfer
+
+            # Also apply the first coordinate transformation while adding this ptset.
+            # The child FFDs only interact with their parent FFD, and therefore,
+            # do not need to access the coordinate transformation routine; i.e.
+            # all transformations are applied once during the highest level DVGeo object.
+            points = self.coord_xfer[ptName](points, mode="bwd", apply_displacement=True)
+
         self.points[ptName] = points
 
         # Ensure we project into the undeformed geometry
@@ -656,7 +785,7 @@ class DVGeometry(BaseDVGeometry):
         DVGeometry which may have its own global and/or local design
         variables. Coordinates do **not** need to be added to the
         children. The parent object will take care of that in a call
-        to addPointSet().
+        to :func:`addPointSet()`.
 
         See https://github.com/mdolab/pygeo/issues/7 for a description of an
         issue with Child FFDs that you should be aware of if you are combining
@@ -682,9 +811,10 @@ class DVGeometry(BaseDVGeometry):
 
         # We must finalize the Child here since we need the ref axis
         # coefficients
-        childDVGeo._finalizeAxis()
-        self.FFD.attachPoints(childDVGeo.refAxis.coef, "child%d_axis" % (iChild))
-        self.FFD.calcdPtdCoef("child%d_axis" % (iChild))
+        if len(childDVGeo.axis) > 0:
+            childDVGeo._finalizeAxis()
+            self.FFD.attachPoints(childDVGeo.refAxis.coef, "child%d_axis" % (iChild))
+            self.FFD.calcdPtdCoef("child%d_axis" % (iChild))
 
         # Add the child to the parent and return
         self.children.append(childDVGeo)
@@ -709,8 +839,8 @@ class DVGeometry(BaseDVGeometry):
         lower : float, or iterable list of floats
             The lower bound(s) for the variable(s). A single variable
             is permissable even if an array is given for value. However,
-            if an array is given for 'lower', it must be the same length
-            as 'value'
+            if an array is given for ``lower``, it must be the same length
+            as ``value``
 
         func : python function
             The python function handle that will be used to apply the
@@ -718,7 +848,7 @@ class DVGeometry(BaseDVGeometry):
 
         upper : float, or iterable list of floats
             The upper bound(s) for the variable(s). Same restrictions as
-            'lower'
+            ``lower``
 
         scale : float, or iterable list of floats
             The scaling of the variables. A good approximate scale to
@@ -738,10 +868,6 @@ class DVGeometry(BaseDVGeometry):
         if isinstance(config, str):
             config = [config]
         self.DV_listGlobal[dvName] = geoDVGlobal(dvName, value, lower, upper, scale, func, config)
-
-    def addGeoDVGlobal(self, *args, **kwargs):
-        warnings.warn("addGeoDVGlobal will be deprecated, use addGlobalDV instead")
-        return self.addGlobalDV(*args, **kwargs)
 
     def addLocalDV(
         self, dvName, lower=None, upper=None, scale=1.0, axis="y", volList=None, pointSelect=None, config=None
@@ -771,7 +897,7 @@ class DVGeometry(BaseDVGeometry):
         axis : str. Default is `y`
             The coordinate directions to move. Permissible values are `x`,
             `y` and `z`. If more than one direction is required, use multiple
-            calls to addLocalDV with different axis values.
+            calls to :func:`addLocalDV` with different axis values.
 
         volList : list
             Use the control points on the volume indices given in volList.
@@ -824,7 +950,7 @@ class DVGeometry(BaseDVGeometry):
                 for vol in volList:
                     volListTmp.append(vol)
                 for vol in volList:
-                    volListTmp.append(vol + self.FFD.nVol / 2)
+                    volListTmp.append(vol + self.FFD.nVol // 2)
                 volList = volListTmp
 
             volList = np.atleast_1d(volList).astype("int")
@@ -839,10 +965,6 @@ class DVGeometry(BaseDVGeometry):
         self.DV_listLocal[dvName] = geoDVLocal(dvName, lower, upper, scale, axis, ind, self.masks, config)
 
         return self.DV_listLocal[dvName].nVal
-
-    def addGeoDVLocal(self, *args, **kwargs):
-        warnings.warn("addGeoDVLocal will be deprecated, use addLocalDV instead")
-        return self.addLocalDV(*args, **kwargs)
 
     def addSpanwiseLocalDV(
         self,
@@ -946,7 +1068,7 @@ class DVGeometry(BaseDVGeometry):
                 for vol in volList:
                     volListTmp.append(vol)
                 for vol in volList:
-                    volListTmp.append(vol + self.FFD.nVol / 2)
+                    volListTmp.append(vol + self.FFD.nVol // 2)
                 volList = volListTmp
 
             volList = np.atleast_1d(volList).astype("int")
@@ -1014,10 +1136,6 @@ class DVGeometry(BaseDVGeometry):
         )
 
         return self.DV_listSpanwiseLocal[dvName].nVal
-
-    def addGeoDVSpanwiseLocal(self, *args, **kwargs):
-        warnings.warn("addGeoDVSpanwiseLocal will be deprecated, use addSpanwiseLocalDV instead")
-        return self.addSpanwiseLocalDV(*args, **kwargs)
 
     def addLocalSectionDV(
         self,
@@ -1184,7 +1302,7 @@ class DVGeometry(BaseDVGeometry):
                 for vol in volList:
                     volListTmp.append(vol)
                 for vol in volList:
-                    volListTmp.append(vol + self.FFD.nVol / 2)
+                    volListTmp.append(vol + self.FFD.nVol // 2)
                 volList = volListTmp
 
             volList = np.atleast_1d(volList).astype("int")
@@ -1282,11 +1400,7 @@ class DVGeometry(BaseDVGeometry):
         self.DVComposite = geoDVComposite(dvName, values, NDV, u, scale=scale, s=s)
         self.useComposite = True
 
-    def addGeoDVSectionLocal(self, *args, **kwargs):
-        warnings.warn("addGeoDVSectionLocal will be deprecated, use addLocalSectionDV instead")
-        return self.addLocalSectionDV(*args, **kwargs)
-
-    def getSymmetricCoefList(self, volList=None, pointSelect=None, tol=1e-8):
+    def getSymmetricCoefList(self, volList=None, pointSelect=None, tol=1e-8, getSymmPlane=False):
         """
         Determine the pairs of coefs that need to be constrained for symmetry.
 
@@ -1302,6 +1416,13 @@ class DVGeometry(BaseDVGeometry):
         tol : float
               Tolerance for ignoring nodes around the symmetry plane. These should be
               merged by the network/connectivity anyway
+        getSymmPlane : bool
+              If this flag is set to True, we also return the points on the symmetry plane
+              for all volumes. e.g. a reduced point on the symmetry plane with the same
+              indices on both volumes will show up as the same value in both arrays. This
+              is useful when determining the indices to ignore when adding pointsets. The
+              default behavior will not include the points exactly on the symmetry plane.
+              this is more useful for adding them as linear constraints
 
         Returns
         -------
@@ -1310,10 +1431,6 @@ class DVGeometry(BaseDVGeometry):
 
         indSetB : list of ints
                   Other half of the coefs to be constrained
-
-        Examples
-        --------
-
         """
 
         if self.FFD.symmPlane is None:
@@ -1337,7 +1454,7 @@ class DVGeometry(BaseDVGeometry):
                 for vol in volList:
                     volListTmp.append(vol)
                 for vol in volList:
-                    volListTmp.append(vol + self.FFD.nVol / 2)
+                    volListTmp.append(vol + self.FFD.nVol // 2)
                 volList = volListTmp
 
                 volList = np.atleast_1d(volList).astype("int")
@@ -1370,11 +1487,28 @@ class DVGeometry(BaseDVGeometry):
                     # Now find any matching nodes within tol. there should be 2 and
                     # only 2 if the mesh is symmetric
                     Ind = tree.query_ball_point(pt, tol)  # should this be a separate tol
-                    if not (len(Ind) == 2):
-                        raise Error("more than 2 coefs found that match pt")
+                    if len(Ind) == 2:
+                        # check which point is on which side
+                        if pts[Ind[0], index] > 0:
+                            # first one is on the primary side
+                            indSetA.append(Ind[0])
+                            indSetB.append(Ind[1])
+                        else:
+                            # flip the order
+                            indSetA.append(Ind[1])
+                            indSetB.append(Ind[0])
                     else:
+                        raise Error("more than 2 coefs found that match pt")
+
+                elif (abs(pt[index]) < tol) and getSymmPlane:
+                    # this point is on the symmetry plane
+                    # if everything went right so far, this should return only one point
+                    Ind = tree.query_ball_point(pt, tol)
+                    if len(Ind) == 1:
                         indSetA.append(Ind[0])
-                        indSetB.append(Ind[1])
+                        indSetB.append(Ind[0])
+                    else:
+                        raise Error("more than 1 coefs found that match pt on symmetry plane")
 
         return indSetA, indSetB
 
@@ -1695,7 +1829,23 @@ class DVGeometry(BaseDVGeometry):
         if not self.isChild:
             self.FFD.coef = self.origFFDCoef.copy()
             self._setInitialValues()
+
+            for iChild in range(len(self.children)):
+                if len(self.children[iChild].axis) > 0:
+                    self.children[iChild]._finalize()
+                    refaxis_ptSetName = "child%d_axis" % (iChild)
+                    if refaxis_ptSetName not in self.FFD.embeddedVolumes:
+                        self.FFD.attachPoints(self.children[iChild].refAxis.coef, refaxis_ptSetName)
+                        self.FFD.calcdPtdCoef("child%d_axis" % (iChild))
         else:
+            for iChild in range(len(self.children)):
+                if len(self.children[iChild].axis) > 0:
+                    refaxis_ptSetName = "child%d_axis" % (iChild)
+                    if refaxis_ptSetName not in self.FFD.embeddedVolumes:
+                        raise Error(
+                            f"refaxis {refaxis_ptSetName} cannot be added to child FFD after child is appended to parent"
+                        )
+
             # Update all coef
             self.FFD._updateVolumeCoef()
 
@@ -1812,6 +1962,11 @@ class DVGeometry(BaseDVGeometry):
         if self.isChild and childDelta:
             return Xfinal - Xstart
         else:
+            # we only check if we need to apply the coordinate transformation
+            # and move the pointset to the reference frame of the application,
+            # if this is the last pygeo in the chain
+            if ptSetName in self.coord_xfer:
+                Xfinal = self.coord_xfer[ptSetName](Xfinal, mode="fwd", apply_displacement=True)
             return Xfinal
 
     def applyToChild(self, iChild):
@@ -2047,6 +2202,14 @@ class DVGeometry(BaseDVGeometry):
             dIdpt = np.array([dIdpt])
         N = dIdpt.shape[0]
 
+        # apply the coordinate transformation on dIdpt if this pointset has it.
+        if ptSetName in self.coord_xfer:
+            # loop over functions
+            for ifunc in range(N):
+                # its important to remember that dIdpt are vector-like values,
+                # so we don't apply the transformations and only the rotations!
+                dIdpt[ifunc] = self.coord_xfer[ptSetName](dIdpt[ifunc], mode="bwd", apply_displacement=False)
+
         # generate the total Jacobian self.JT
         self.computeTotalJacobian(ptSetName, config=config)
 
@@ -2147,6 +2310,13 @@ class DVGeometry(BaseDVGeometry):
         else:
             xsdot = self.JT[ptSetName].T.dot(newvec)
             xsdot.reshape(len(xsdot) // 3, 3)
+
+            # check if we have a coordinate transformation on this ptset
+            if ptSetName in self.coord_xfer:
+                # its important to remember that dIdpt are vector-like values,
+                # so we don't apply the transformations and only the rotations!
+                xsdot = self.coord_xfer[ptSetName](xsdot, mode="fwd", apply_displacement=False)
+
             # Maybe this should be:
             # xsdot = xsdot.reshape(len(xsdot)//3, 3)
 
@@ -2202,6 +2372,13 @@ class DVGeometry(BaseDVGeometry):
         if self.JT[ptSetName] is None:
             xsdot = np.zeros((0, 3))
         else:
+
+            # check if we have a coordinate transformation on this ptset
+            if ptSetName in self.coord_xfer:
+                # its important to remember that dIdpt are vector-like values,
+                # so we don't apply the transformations and only the rotations!
+                vec = self.coord_xfer[ptSetName](vec, mode="bwd", apply_displacement=False)
+
             xsdot = self.JT[ptSetName].dot(np.ravel(vec))
 
         # Pack result into dictionary
@@ -2485,11 +2662,11 @@ class DVGeometry(BaseDVGeometry):
             Flag specifying whether spanwiselocal variables are to be added
 
         ignoreVars : list of strings
-            List of design variables the user DOESN'T want to use
+            List of design variables the user doesn't want to use
             as optimization variables.
 
         freezeVars : list of string
-            List of design variables the user WANTS to add as optimization
+            List of design variables the user wants to add as optimization
             variables, but to have the lower and upper bounds set at the current
             variable. This effectively eliminates the variable, but it the variable
             is still part of the optimization.
@@ -3721,8 +3898,12 @@ class DVGeometry(BaseDVGeometry):
 
             # We need to save the reference state so that we can always start
             # from the same place when calling _update_deriv
-            refFFDCoef = copy.copy(self.FFD.coef)
-            refCoef = copy.copy(self.coef)
+            if not self.isChild:
+                refFFDCoef = copy.copy(self.origFFDCoef.astype("D"))
+                refCoef = copy.copy(self.coef0.astype("D"))
+            else:
+                refFFDCoef = copy.copy(self.FFD.coef)
+                refCoef = copy.copy(self.coef)
 
             iDV = self.nDVG_count
             for key in self.DV_listGlobal:
@@ -4366,7 +4547,7 @@ class DVGeometry(BaseDVGeometry):
         `k`
             along span
 
-        If we choose `sectionIndex='k'`, this function will compute a frame which
+        If we choose ``sectionIndex='k'``, this function will compute a frame which
         has two axes aligned with the k-planes of the FFD volume. This is useful
         because in some cases (as with a winglet), we want to perturb sectional
         control points within the section plane instead of in the global

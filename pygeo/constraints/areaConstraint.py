@@ -287,7 +287,7 @@ class TriangulatedSurfaceConstraint(GeometricConstraint):
         )
         return deriv_output
 
-    def addConstraintsPyOpt(self, optProb):
+    def addConstraintsPyOpt(self, optProb, exclude_wrt=None):
         """
         Add the constraints to pyOpt, if the flag is set
         """
