@@ -1855,7 +1855,7 @@ class DVConstraints:
         indSetB=None,
         name=None,
         config=None,
-        childIdx=None,
+        childName=None,
         comp=None,
         DVGeoName="default",
     ):
@@ -1924,10 +1924,8 @@ class DVConstraints:
             The DVGeo configuration to apply this constraint to. Must be either None
             which will apply to *ALL* the local DV groups or a single string specifying
             a particular configuration.
-        childIdx : int
-            The zero-based index of the child FFD, if this constraint is being applied to a child FFD.
-            The index is defined by the order in which you add the child FFD to the parent.
-            For example, the first child FFD has an index of 0, the second an index of 1, and so on.
+        childName : str
+            Name of the child FFD, if this constraint is being applied to a child FFD.
         comp: str
             The component name if using DVGeometryMulti.
 
@@ -1957,8 +1955,8 @@ class DVConstraints:
         else:
             DVGeo = self.DVGeometries[DVGeoName].DVGeoDict[comp]
 
-        if childIdx is not None:
-            DVGeo = DVGeo.children[childIdx]
+        if childName is not None:
+            DVGeo = DVGeo.children[childName]
 
         # Now determine what type of specification we have:
         if volID is not None and faceID is not None:
@@ -2054,7 +2052,7 @@ class DVConstraints:
         upper=0,
         name=None,
         config=None,
-        childIdx=None,
+        childName=None,
         comp=None,
         DVGeoName="default",
     ):
@@ -2108,10 +2106,8 @@ class DVConstraints:
             The DVGeo configuration to apply this constraint to. Must be either None
             which will apply to *ALL* the local DV groups or a single string specifying
             a particular configuration.
-        childIdx : int
-            The zero-based index of the child FFD, if this constraint is being applied to a child FFD.
-            The index is defined by the order in which you add the child FFD to the parent.
-            For example, the first child FFD has an index of 0, the second an index of 1, and so on.
+        childName : str
+            Name of the child FFD, if this constraint is being applied to a child FFD.
         comp: str
             The component name if using DVGeometryMulti.
 
@@ -2135,8 +2131,8 @@ class DVConstraints:
         else:
             DVGeo = self.DVGeometries[DVGeoName].DVGeoDict[comp]
 
-        if childIdx is not None:
-            DVGeo = DVGeo.children[childIdx]
+        if childName is not None:
+            DVGeo = DVGeo.children[childName]
 
         if len(indSetA) != len(indSetB):
             raise Error("The length of the supplied indices are not " "the same length")
@@ -3150,7 +3146,7 @@ class DVConstraints:
         )
 
     def addMonotonicConstraints(
-        self, key, slope=1.0, name=None, start=0, stop=-1, config=None, childIdx=None, comp=None, DVGeoName="default"
+        self, key, slope=1.0, name=None, start=0, stop=-1, config=None, childName=None, comp=None, DVGeoName="default"
     ):
         """
         Add monotonic constraints to a given design variable.
@@ -3178,10 +3174,8 @@ class DVConstraints:
             The DVGeo configuration to apply this constraint to. Must be either None
             which will apply to *ALL* the local DV groups or a single string specifying
             a particular configuration.
-        childIdx : int
-            The zero-based index of the child FFD, if this constraint is being applied to a child FFD.
-            The index is defined by the order in which you add the child FFD to the parent.
-            For example, the first child FFD has an index of 0, the second an index of 1, and so on.
+        childName : str
+            Name of the child FFD, if this constraint is being applied to a child FFD.
         comp: str
             The component name if using DVGeometryMulti.
 
@@ -3196,8 +3190,8 @@ class DVConstraints:
         else:
             DVGeo = self.DVGeometries[DVGeoName].DVGeoDict[comp]
 
-        if childIdx is not None:
-            DVGeo = DVGeo.children[childIdx]
+        if childName is not None:
+            DVGeo = DVGeo.children[childName]
 
         if name is None:
             conName = "%s_monotonic_constraint_%d" % (self.name, len(self.linearCon))
