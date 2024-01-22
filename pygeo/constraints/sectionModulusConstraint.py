@@ -60,7 +60,7 @@ class SectionModulusConstraint(GeometricConstraint):
 
         # Loop over each spanwise location
         for i in range(self.nSpan):
-            reorderedSectionNodes = self._reorderSectionCoordsCCW(coords[i,:,:,:])
+            reorderedSectionNodes = self._reorderSectionCoordsCCW(coords[i, :, :, :])
             S[i] = polygon.sectionModulus(reorderedSectionNodes[:, 0:2], principalAxes=self.principalAxes)
 
         return S
@@ -81,9 +81,9 @@ class SectionModulusConstraint(GeometricConstraint):
             in a counterclockwise order.
         """
 
-        reorderedSectionCoords = np.zeros((self.nChord*2, 3))
-        reorderedSectionCoords[:self.nChord, :] = sectionCoords[:, 1, :]  # Bottom x,y,z coords
-        reorderedSectionCoords[self.nChord:, :] = sectionCoords[:, 0, :][::-1]  # Top x,y,z coords reversed
+        reorderedSectionCoords = np.zeros((self.nChord * 2, 3))
+        reorderedSectionCoords[: self.nChord, :] = sectionCoords[:, 1, :]  # Bottom x,y,z coords
+        reorderedSectionCoords[self.nChord :, :] = sectionCoords[:, 0, :][::-1]  # Top x,y,z coords reversed
 
         return reorderedSectionCoords
 
@@ -104,11 +104,10 @@ class SectionModulusConstraint(GeometricConstraint):
         """
 
         sectionCoords = np.zeros((self.nChord, 2, 3))
-        sectionCoords[:, 1, :] = reorderedSectionCoords[:self.nChord, :]  # Bottom x,y,z coords
-        sectionCoords[:, 0, :] = reorderedSectionCoords[self.nChord:, :][::-1]  # Top x,y,z coords reversed
+        sectionCoords[:, 1, :] = reorderedSectionCoords[: self.nChord, :]  # Bottom x,y,z coords
+        sectionCoords[:, 0, :] = reorderedSectionCoords[self.nChord :, :][::-1]  # Top x,y,z coords reversed
 
         return sectionCoords
-
 
     def evalFunctionsSens(self, funcsSens, config):
         """
@@ -123,7 +122,6 @@ class SectionModulusConstraint(GeometricConstraint):
 
         nDV = self.DVGeo.getNDV()
         if nDV > 0:
-
             # Compute the Jacobian
             dSdPt = self.evalSectionModulusSens()
             if self.scaled:
@@ -146,16 +144,18 @@ class SectionModulusConstraint(GeometricConstraint):
 
         # Loop over each spanwise location
         for i in range(self.nSpan):
-            reorderedSectionNodes = self._reorderSectionCoordsCCW(coords[i,:,:,:])
+            reorderedSectionNodes = self._reorderSectionCoordsCCW(coords[i, :, :, :])
             reorderedTempb = np.zeros_like(reorderedSectionNodes)
-            polygon.sectionModulus_b(reorderedSectionNodes[:, 0:2], reorderedTempb[:, 0:2], Sb=1.0, principalAxes=self.principalAxes)
+            polygon.sectionModulus_b(
+                reorderedSectionNodes[:, 0:2], reorderedTempb[:, 0:2], Sb=1.0, principalAxes=self.principalAxes
+            )
 
             # Undo the coord ordering
             tempb = np.zeros_like(coords)
-            tempb[i,:,:,:] = self._undoReorderSectionCoordsCCW(reorderedTempb)
+            tempb[i, :, :, :] = self._undoReorderSectionCoordsCCW(reorderedTempb)
 
             # Reshape back to flattened array for DVGeo
-            coordsb[i,:,:] = tempb.reshape((self.nSpan * self.nChord * 2, 3))
+            coordsb[i, :, :] = tempb.reshape((self.nSpan * self.nChord * 2, 3))
 
         return coordsb
 
@@ -166,7 +166,7 @@ class SectionModulusConstraint(GeometricConstraint):
         """
 
         coords = self.coords.reshape([self.nSpan, self.nChord, 2, 3])
-        nNodesPerSection = self.nChord*2
+        nNodesPerSection = self.nChord * 2
         nElements = nNodesPerSection
 
         for i in range(self.nSpan):
@@ -174,15 +174,15 @@ class SectionModulusConstraint(GeometricConstraint):
             handle.write(f"Nodes={nNodesPerSection}, Elements={nElements}, ZONETYPE=FELINESEG\n")
             handle.write("DATAPACKING=POINT\n")
 
-            ccwCoords = self._reorderSectionCoordsCCW(coords[i,:,:,:])
+            ccwCoords = self._reorderSectionCoordsCCW(coords[i, :, :, :])
 
             for j in range(nNodesPerSection):
                 # Write the bottom section
                 handle.write(f"{ccwCoords[j, 0]:f} {ccwCoords[j, 1]:f} {ccwCoords[j, 2]:f}\n")
 
             for j in range(nNodesPerSection):
-                idx1 = j+1
-                idx2 = j+2
+                idx1 = j + 1
+                idx2 = j + 2
                 # If we have reached the end we need to close the curve
                 if idx1 == nNodesPerSection:
                     idx2 = 1

@@ -9,18 +9,22 @@ baseDir = os.path.dirname(os.path.abspath(__file__))
 
 # Functions generating coordinates
 
+
 def getRTRectCoords():
     """
     Simple static coords of rotated and translated rectangle (counterclockwise coords)
     """
     return np.array([[2.0, 0.0], [10.0, 4.0], [8.0, 8.0], [0.0, 4.0]])
 
+
 def computeRectCoords(b, h, xc=0.0, yc=0.0):
     """
     Generate coordinates in counterclockwise direction for a rectangle
     with base b and height h and centroid at (xc,yc)
     """
-    coords = np.array([[xc-b/2, yc-h/2], [xc+b/2, yc-h/2], [xc+b/2, yc+h/2], [xc-b/2, yc+h/2]])
+    coords = np.array(
+        [[xc - b / 2, yc - h / 2], [xc + b / 2, yc - h / 2], [xc + b / 2, yc + h / 2], [xc - b / 2, yc + h / 2]]
+    )
 
     return coords
 
@@ -150,7 +154,6 @@ class TestPolygon(unittest.TestCase):
         np.testing.assert_allclose(xc, xcTrue, rtol=1e-4)
         np.testing.assert_allclose(yc, ycTrue, rtol=1e-4)
 
-
     def test_centroidPoly_b(self):
         # ------------------------------------------------------------------
         # Rotated and translated rectangle (counterclockwise coords)
@@ -213,7 +216,7 @@ class TestPolygon(unittest.TestCase):
         # Centroid is at (1,2). Compute second moments of area at origin.
         b = 2.0
         h = 4.0
-        coords = computeRectCoords(b, h, xc=b/2, yc=h/2)
+        coords = computeRectCoords(b, h, xc=b / 2, yc=h / 2)
         Ixx, Ixy, Iyy, Jz = polygon.secondMomentAreaPoly(coords, aboutCentroid=False)
 
         # Analytically integrated values at origin
@@ -227,14 +230,13 @@ class TestPolygon(unittest.TestCase):
         np.testing.assert_allclose(Iyy, IyyTrue)
         np.testing.assert_allclose(Jz, JzTrue)
 
-
         # ------------------------------------------------------------------
         # Rectangle with base b=2 and height h=3, with origin of axes at the centroid at (1,2).
         # Compute second moments of area at centroid (which is not coincident with origin).
         # This should give same values as b=2 and height h=3, with origin of axes and centroid coincident at (0,0)
         b = 2.0
         h = 4.0
-        coords = computeRectCoords(b, h, xc=b/2, yc=h/2)
+        coords = computeRectCoords(b, h, xc=b / 2, yc=h / 2)
         Ixx, Ixy, Iyy, Jz = polygon.secondMomentAreaPoly(coords, aboutCentroid=True)
 
         # Analytically integrated values at centroid
@@ -259,7 +261,9 @@ class TestPolygon(unittest.TestCase):
 
         # Check that same value is obtained with aboutCentroid as True or False.
         # Note that there are small arithmetic errors in computing the centroid, hence the adjusted tolerance.
-        np.testing.assert_allclose((Ixx, Ixy, Iyy, Jz), polygon.secondMomentAreaPoly(coords, aboutCentroid=True), rtol=0, atol=1e-13)
+        np.testing.assert_allclose(
+            (Ixx, Ixy, Iyy, Jz), polygon.secondMomentAreaPoly(coords, aboutCentroid=True), rtol=0, atol=1e-13
+        )
 
         # Analytically integrated values
         IxxTrue = np.pi * r**4 / 4
@@ -302,9 +306,7 @@ class TestPolygon(unittest.TestCase):
         np.testing.assert_allclose(Jz, 0.003874187471036633)
 
     def test_secondMomentAreaPoly_b(self):
-
         def _run(coords, aboutCentroid=True):
-
             # Compute complex step reference
             h = 1e-40
             IxxCS = np.zeros_like(coords)
@@ -336,24 +338,32 @@ class TestPolygon(unittest.TestCase):
             dIyydCoords = np.zeros_like(coords)
             dJzdCoords = np.zeros_like(coords)
 
-            polygon.secondMomentAreaPoly_b(coords, dIxxdCoords, Ixxb=1.0, Ixyb=0.0, Iyyb=0.0, Jzb=0.0, aboutCentroid=aboutCentroid)
-            polygon.secondMomentAreaPoly_b(coords, dIxydCoords, Ixxb=0.0, Ixyb=1.0, Iyyb=0.0, Jzb=0.0, aboutCentroid=aboutCentroid)
-            polygon.secondMomentAreaPoly_b(coords, dIyydCoords, Ixxb=0.0, Ixyb=0.0, Iyyb=1.0, Jzb=0.0, aboutCentroid=aboutCentroid)
-            polygon.secondMomentAreaPoly_b(coords, dJzdCoords, Ixxb=0.0, Ixyb=0.0, Iyyb=0.0, Jzb=1.0, aboutCentroid=aboutCentroid)
+            polygon.secondMomentAreaPoly_b(
+                coords, dIxxdCoords, Ixxb=1.0, Ixyb=0.0, Iyyb=0.0, Jzb=0.0, aboutCentroid=aboutCentroid
+            )
+            polygon.secondMomentAreaPoly_b(
+                coords, dIxydCoords, Ixxb=0.0, Ixyb=1.0, Iyyb=0.0, Jzb=0.0, aboutCentroid=aboutCentroid
+            )
+            polygon.secondMomentAreaPoly_b(
+                coords, dIyydCoords, Ixxb=0.0, Ixyb=0.0, Iyyb=1.0, Jzb=0.0, aboutCentroid=aboutCentroid
+            )
+            polygon.secondMomentAreaPoly_b(
+                coords, dJzdCoords, Ixxb=0.0, Ixyb=0.0, Iyyb=0.0, Jzb=1.0, aboutCentroid=aboutCentroid
+            )
 
             np.testing.assert_allclose(dIxxdCoords, IxxCS)
             np.testing.assert_allclose(dIxydCoords, IxyCS)
             np.testing.assert_allclose(dIyydCoords, IyyCS)
             np.testing.assert_allclose(dJzdCoords, JzCS)
 
-
-            dIxxdCoords, dIxydCoords, dIyydCoords, dJzdCoords = polygon.secondMomentAreaPoly_d(coords, aboutCentroid=aboutCentroid)
+            dIxxdCoords, dIxydCoords, dIyydCoords, dJzdCoords = polygon.secondMomentAreaPoly_d(
+                coords, aboutCentroid=aboutCentroid
+            )
 
             np.testing.assert_allclose(dIxxdCoords, IxxCS)
             np.testing.assert_allclose(dIxydCoords, IxyCS)
             np.testing.assert_allclose(dIyydCoords, IyyCS)
             np.testing.assert_allclose(dJzdCoords, JzCS)
-
 
         # ------------------------------------------------------------------
         # Rectangle with base b=2 and height h=3, with origin of axes and centroid coincident at (0,0)
@@ -369,16 +379,14 @@ class TestPolygon(unittest.TestCase):
         _run(coords, aboutCentroid=False)
         _run(coords, aboutCentroid=True)
 
-
     def test_principalAxesSecondMomentArea(self):
-
         # ------------------------------------------------------------------
         # Rectangle with base b=2 and height h=3, with origin of axes at the centroid at (1,2).
         # Compute second moments of area at centroid (which is not coincident with origin).
         # This should give same values as b=2 and height h=3, with origin of axes and centroid coincident at (0,0)
         b = 2.0
         h = 4.0
-        coords = computeRectCoords(b, h, xc=b/2, yc=h/2)
+        coords = computeRectCoords(b, h, xc=b / 2, yc=h / 2)
         Ixx, Ixy, Iyy, _ = polygon.secondMomentAreaPoly(coords, aboutCentroid=True)
         Ipmax, Ipmin, theta = polygon.principalAxesSecondMomentArea(Ixx, Ixy, Iyy)
 
@@ -391,7 +399,7 @@ class TestPolygon(unittest.TestCase):
         # Now flip the dimensions, but should still get the same principal values as before, but rotation by 90 degrees
         b = 4.0
         h = 2.0
-        coords = computeRectCoords(b, h, xc=b/2, yc=h/2)
+        coords = computeRectCoords(b, h, xc=b / 2, yc=h / 2)
         Ixx, Ixy, Iyy, _ = polygon.secondMomentAreaPoly(coords, aboutCentroid=True)
         Ipmax, Ipmin, theta = polygon.principalAxesSecondMomentArea(Ixx, Ixy, Iyy)
         # Values should be flipped, and  and no rotation
@@ -412,9 +420,7 @@ class TestPolygon(unittest.TestCase):
         np.testing.assert_allclose(Iyy, Ipmax)
         np.testing.assert_allclose(theta, -45.0)
 
-
     def test_principalAxesSecondMomentArea_b(self):
-
         # ------------------------------------------------------------------
         # Simple box
         # b = 4.0
@@ -450,16 +456,26 @@ class TestPolygon(unittest.TestCase):
         Ipmax, Ipmin, theta = polygon.principalAxesSecondMomentArea(Ixx, Ixy, Iyy)
         Ipmaxdh, Ipmindh, thetadh = polygon.principalAxesSecondMomentArea(Ixx + hFD, Ixy, Iyy)
 
-        dIpmaxdIxxFD = (Ipmaxdh - Ipmax)/hFD
-        dIpmindIxxFD = (Ipmindh - Ipmin)/hFD
-        dthetadIxxFD = (thetadh - theta)/hFD
+        dIpmaxdIxxFD = (Ipmaxdh - Ipmax) / hFD
+        dIpmindIxxFD = (Ipmindh - Ipmin) / hFD
+        dthetadIxxFD = (thetadh - theta) / hFD
 
         np.testing.assert_allclose(dIpmaxdIxxFD, dIpmaxdIxxCS)
         np.testing.assert_allclose(dIpmindIxxFD, dIpmindIxxCS)
         np.testing.assert_allclose(dthetadIxxFD, dthetadIxxCS)
 
         # Analytic
-        dIpmaxdIxx, dIpmaxdIxy, dIpmaxdIyy, dIpmindIxx, dIpmindIxy, dIpmindIyy, dthetadIxx, dthetadIxy, dthetadIyy = polygon.principalAxesSecondMomentArea_d(Ixx, Ixy, Iyy)
+        (
+            dIpmaxdIxx,
+            dIpmaxdIxy,
+            dIpmaxdIyy,
+            dIpmindIxx,
+            dIpmindIxy,
+            dIpmindIyy,
+            dthetadIxx,
+            dthetadIxy,
+            dthetadIyy,
+        ) = polygon.principalAxesSecondMomentArea_d(Ixx, Ixy, Iyy)
 
         np.testing.assert_allclose(dIpmaxdIxx, dIpmaxdIxxCS)
         np.testing.assert_allclose(dIpmaxdIxy, dIpmaxdIxyCS)
@@ -477,17 +493,23 @@ class TestPolygon(unittest.TestCase):
         dIpmaxdIxx = 0.0
         dIpmaxdIxy = 0.0
         dIpmaxdIyy = 0.0
-        dIpmaxdIxx, dIpmaxdIxy, dIpmaxdIyy = polygon.principalAxesSecondMomentArea_b(Ixx, dIpmaxdIxx, Ixy, dIpmaxdIxy, Iyy, dIpmaxdIyy, Ipmaxb=1.0, Ipminb=0.0, thetab=0.0)
+        dIpmaxdIxx, dIpmaxdIxy, dIpmaxdIyy = polygon.principalAxesSecondMomentArea_b(
+            Ixx, dIpmaxdIxx, Ixy, dIpmaxdIxy, Iyy, dIpmaxdIyy, Ipmaxb=1.0, Ipminb=0.0, thetab=0.0
+        )
 
         dIpmindIxx = 0.0
         dIpmindIxy = 0.0
         dIpmindIyy = 0.0
-        dIpmindIxx, dIpmindIxy, dIpmindIyy = polygon.principalAxesSecondMomentArea_b(Ixx, dIpmindIxx, Ixy, dIpmindIxy, Iyy, dIpmindIyy, Ipmaxb=0.0, Ipminb=1.0, thetab=0.0)
+        dIpmindIxx, dIpmindIxy, dIpmindIyy = polygon.principalAxesSecondMomentArea_b(
+            Ixx, dIpmindIxx, Ixy, dIpmindIxy, Iyy, dIpmindIyy, Ipmaxb=0.0, Ipminb=1.0, thetab=0.0
+        )
 
         dthetadIxx = 0.0
         dthetadIxy = 0.0
         dthetadIyy = 0.0
-        dthetadIxx, dthetadIxy, dthetadIyy = polygon.principalAxesSecondMomentArea_b(Ixx, dthetadIxx, Ixy, dthetadIxy, Iyy, dthetadIyy, Ipmaxb=0.0, Ipminb=0.0, thetab=1.0)
+        dthetadIxx, dthetadIxy, dthetadIyy = polygon.principalAxesSecondMomentArea_b(
+            Ixx, dthetadIxx, Ixy, dthetadIxy, Iyy, dthetadIyy, Ipmaxb=0.0, Ipminb=0.0, thetab=1.0
+        )
 
         np.testing.assert_allclose(dIpmaxdIxx, dIpmaxdIxxCS)
         np.testing.assert_allclose(dIpmaxdIxy, dIpmaxdIxyCS)
@@ -501,17 +523,15 @@ class TestPolygon(unittest.TestCase):
         np.testing.assert_allclose(dthetadIxy, dthetadIxyCS)
         np.testing.assert_allclose(dthetadIyy, dthetadIyyCS)
 
-
     def test_sectionModulus(self):
-
         # Rotated and translated rectangle (counterclockwise coords)
         coords = getRTRectCoords()
 
         S = polygon.sectionModulus(coords, principalAxes=False)
-        np.testing.assert_allclose(S, 2.665127228812929e+01)
+        np.testing.assert_allclose(S, 2.665127228812929e01)
 
         S = polygon.sectionModulus(coords, principalAxes=True)
-        np.testing.assert_allclose(S, 2.975275368217124e+01)
+        np.testing.assert_allclose(S, 2.975275368217124e01)
 
         # ------------------------------------------------------------------
         # Rectangle with base b=2 and height h=3, with origin of axes at centroid (0,0)
@@ -522,8 +542,8 @@ class TestPolygon(unittest.TestCase):
 
         # Analytic values
         IxxTrue = b * h**3 / 12
-        yMaxTrue = h/2
-        STrue = IxxTrue/yMaxTrue
+        yMaxTrue = h / 2
+        STrue = IxxTrue / yMaxTrue
 
         # Due to the KS function the computed value will be somewhat off, explaining the loose tolerance
         np.testing.assert_allclose(S, STrue, rtol=1e-2)
@@ -536,13 +556,13 @@ class TestPolygon(unittest.TestCase):
         coords = computeCircleCoords(r, N=N, x0=0.0, y0=0.0, thetaStop=np.pi, endpoint=True)
 
         # Analytic values
-        IxxTrue = (9*np.pi**2 - 64)*r**4 / (72 * np.pi)
+        IxxTrue = (9 * np.pi**2 - 64) * r**4 / (72 * np.pi)
         ycTrue = (4 * r) / (3 * np.pi)
         yMaxTrue = r - ycTrue
-        STrue = IxxTrue/yMaxTrue
+        STrue = IxxTrue / yMaxTrue
 
         # Shift the coords such that the origin is at the centroid (only need y)
-        coords[:,1] -= ycTrue
+        coords[:, 1] -= ycTrue
         S = polygon.sectionModulus(coords)
         np.testing.assert_allclose(S, STrue, rtol=1e-2)
 
@@ -563,7 +583,6 @@ class TestPolygon(unittest.TestCase):
         SPrincipal = polygon.sectionModulus(coordsRotated, principalAxes=True)
         np.testing.assert_allclose(SPrincipal, SPrincipalTrue)
 
-
     def test_sectionModulus_b(self):
         def _run(coords, FDCSrtol=1e-4, principalAxes=False):
             # FD reference
@@ -574,7 +593,10 @@ class TestPolygon(unittest.TestCase):
                 for j in range(2):
                     coordsFD = coords.copy()
                     coordsFD[i, j] += h
-                    SFD[i, j] = (polygon.sectionModulus(coordsFD, principalAxes=principalAxes) - polygon.sectionModulus(coords, principalAxes=principalAxes)) / h
+                    SFD[i, j] = (
+                        polygon.sectionModulus(coordsFD, principalAxes=principalAxes)
+                        - polygon.sectionModulus(coords, principalAxes=principalAxes)
+                    ) / h
 
             # Complex step reference
             h = 1e-40
@@ -589,7 +611,6 @@ class TestPolygon(unittest.TestCase):
                     S = polygon.sectionModulus(coordsCS, principalAxes=principalAxes)
                     SCS[i, j] = np.imag(S) / h
 
-
             # Check CS to FD reference for complex step issues
             np.testing.assert_allclose(SCS, SFD, rtol=FDCSrtol)
 
@@ -598,7 +619,6 @@ class TestPolygon(unittest.TestCase):
             polygon.sectionModulus_b(coords, dSdCoords, Sb=1.0, principalAxes=principalAxes)
             np.testing.assert_allclose(dSdCoords, SCS)
 
-
         # ------------------------------------------------------------------
         # Rectangle with base b=2 and height h=3, with origin of axes at centroid (0,0)
         b = 2.0
@@ -606,7 +626,6 @@ class TestPolygon(unittest.TestCase):
         coords = getRTRectCoords()
         _run(coords, FDCSrtol=1e-4, principalAxes=True)
         _run(coords, FDCSrtol=1e-4)
-
 
         # ------------------------------------------------------------------
         # Semicircle of radius 4 with origin of axes at centroid (x0,y0)=(0,0)
@@ -621,7 +640,6 @@ class TestPolygon(unittest.TestCase):
         coords = np.loadtxt(os.path.join(baseDir, "../../input_files/rae2822.dat"), skiprows=1)
         _run(coords, FDCSrtol=6e-3, principalAxes=True)
         _run(coords, FDCSrtol=5e-2)
-
 
 
 if __name__ == "__main__":

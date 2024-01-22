@@ -6,6 +6,7 @@ from . import euclideanNorm
 from pygeo.geo_utils import rotation
 from pygeo.geo_utils import cs
 from pygeo.geo_utils.misc import ksFunction, ksFunction_d
+
 # --------------------------------------------------------------
 #                Polygon geometric functions
 # --------------------------------------------------------------
@@ -261,8 +262,8 @@ def centroidPoly_d(nodes):
 
     xc, yc = centroidPoly(nodes)
     dAdNodes = areaPoly2_d(nodes)
-    dxcdNodes = (dxcdNodes * area - 6.0*area*xc * dAdNodes) / (6.0 * area**2.0)
-    dycdNodes = (dycdNodes * area - 6.0*area*yc * dAdNodes) / (6.0 * area**2.0)
+    dxcdNodes = (dxcdNodes * area - 6.0 * area * xc * dAdNodes) / (6.0 * area**2.0)
+    dycdNodes = (dycdNodes * area - 6.0 * area * yc * dAdNodes) / (6.0 * area**2.0)
 
     return dxcdNodes, dycdNodes
 
@@ -389,7 +390,6 @@ def secondMomentAreaPoly(nodes, aboutCentroid=True):
         nodesTmp[:, 0] -= xc
         nodesTmp[:, 1] -= yc
 
-
     for i in range(N):
         ip1 = i + 1
         # If at the end, circle back to the first to close the curve
@@ -445,7 +445,6 @@ def secondMomentAreaPoly_d(nodes, aboutCentroid=True):
         nodesTmp[:, 0] -= xc
         nodesTmp[:, 1] -= yc
 
-
     # Initialize outputs
     N = nodes.shape[0]
     dIxxdNodesTmp = np.zeros((N, 2))
@@ -499,9 +498,9 @@ def secondMomentAreaPoly_d(nodes, aboutCentroid=True):
 
     # Account for the shift
     dxcdNodes, dycdNodes = centroidPoly_d(nodes)
-    dNodesdNodesTmp = np.zeros((N, 2)) # Should be NxN but all but diagonal is zero
-    dNodesdNodesTmp[:, 0] = 1 #- dxcdNodes[:,0] + 1 - dycdNodes[:,0]
-    dNodesdNodesTmp[:, 1] = 1 #- dxcdNodes[:,1] + 1 - dycdNodes[:,1]
+    dNodesdNodesTmp = np.zeros((N, 2))  # Should be NxN but all but diagonal is zero
+    dNodesdNodesTmp[:, 0] = 1  # - dxcdNodes[:,0] + 1 - dycdNodes[:,0]
+    dNodesdNodesTmp[:, 1] = 1  # - dxcdNodes[:,1] + 1 - dycdNodes[:,1]
 
     # Do elementwise op instead of matrix mult
     dIxxdNodes = dIxxdNodesTmp * dNodesdNodesTmp
@@ -608,17 +607,18 @@ def principalAxesSecondMomentArea(Ixx, Ixy, Iyy):
 
     """
     # 2*theta is computed, but we cast it to deg.
-    theta2 = cs.arctan2(-2*Ixy, Ixx-Iyy)
-    theta = theta2 / 2.0 * (180/np.pi)
+    theta2 = cs.arctan2(-2 * Ixy, Ixx - Iyy)
+    theta = theta2 / 2.0 * (180 / np.pi)
 
     # Compute the principal second moment of area
-    Iavg = (Ixx+Iyy)/2.0
-    hypotenuse = np.sqrt(((Ixx-Iyy)/2.0)**2 + Ixy**2)
+    Iavg = (Ixx + Iyy) / 2.0
+    hypotenuse = np.sqrt(((Ixx - Iyy) / 2.0) ** 2 + Ixy**2)
 
     Ipmax = Iavg + hypotenuse
     Ipmin = Iavg - hypotenuse
 
     return Ipmax, Ipmin, theta
+
 
 def principalAxesSecondMomentArea_d(Ixx, Ixy, Iyy):
     """
@@ -638,12 +638,12 @@ def principalAxesSecondMomentArea_d(Ixx, Ixy, Iyy):
     """
 
     # Compute the principal second moment of area derivatives
-    IDiffHalf = (Ixx-Iyy)/2.0
+    IDiffHalf = (Ixx - Iyy) / 2.0
     tmp = IDiffHalf**2 + Ixy**2
     dhypotenusedIii = 0.0
     # Check for divide by zero
     if tmp != 0.0:
-        dhypotenusedIii = 1/np.sqrt(tmp)
+        dhypotenusedIii = 1 / np.sqrt(tmp)
 
     dIpmaxdIxx = 0.5 + 0.5 * dhypotenusedIii * IDiffHalf
     dIpmaxdIxy = 0.5 * dhypotenusedIii * 2 * Ixy
@@ -656,14 +656,15 @@ def principalAxesSecondMomentArea_d(Ixx, Ixy, Iyy):
     dthetadIxx = 0.0
     dthetadIxy = 0.0
     dthetadIyy = 0.0
-    tmp = (Ixx - Iyy)**2 + (2*Ixy)**2
+    tmp = (Ixx - Iyy) ** 2 + (2 * Ixy) ** 2
     # Check for divide by zero
     if tmp != 0.0:
-        dthetadIxx = Ixy / tmp * (180/np.pi)
-        dthetadIxy = -(Ixx - Iyy) / tmp * (180/np.pi)
-        dthetadIyy = - Ixy / tmp * (180/np.pi)
+        dthetadIxx = Ixy / tmp * (180 / np.pi)
+        dthetadIxy = -(Ixx - Iyy) / tmp * (180 / np.pi)
+        dthetadIyy = -Ixy / tmp * (180 / np.pi)
 
     return dIpmaxdIxx, dIpmaxdIxy, dIpmaxdIyy, dIpmindIxx, dIpmindIxy, dIpmindIyy, dthetadIxx, dthetadIxy, dthetadIyy
+
 
 def principalAxesSecondMomentArea_b(Ixx, Ixxb, Ixy, Ixyb, Iyy, Iyyb, Ipmaxb, Ipminb, thetab):
     """
@@ -680,24 +681,24 @@ def principalAxesSecondMomentArea_b(Ixx, Ixxb, Ixy, Ixyb, Iyy, Iyyb, Ipmaxb, Ipm
     """
 
     # Compute the reverse derivatives
-    theta2b = 180*thetab/(2.0*np.pi)
+    theta2b = 180 * thetab / (2.0 * np.pi)
     iavgb = Ipminb + Ipmaxb
     hypotenuseb = Ipmaxb - Ipminb
-    temp = (Ixx-Iyy)/2.0
+    temp = (Ixx - Iyy) / 2.0
     tempb0 = 0.0
     # Check for divide by zero
     tmp = temp**2 + Ixy**2
     if tmp != 0.0:
-        tempb0 = hypotenuseb/(2.0*np.sqrt(tmp))
+        tempb0 = hypotenuseb / (2.0 * np.sqrt(tmp))
 
-    tempb = 2.0*temp*tempb0/2.0
-    Ixyb = Ixyb + 2.0*Ixy*tempb0 - 2.0*(Ixx-Iyy)*theta2b/((-2.0*Ixy)**2+(Ixx-Iyy)**2)
+    tempb = 2.0 * temp * tempb0 / 2.0
+    Ixyb = Ixyb + 2.0 * Ixy * tempb0 - 2.0 * (Ixx - Iyy) * theta2b / ((-2.0 * Ixy) ** 2 + (Ixx - Iyy) ** 2)
     Ixxb = Ixxb + tempb
     Iyyb = Iyyb - tempb
 
-    tempb = 2.0*Ixy*theta2b/((-2.0*Ixy)**2+(Ixx-Iyy)**2)
-    Ixxb = Ixxb + iavgb/2.0 + tempb
-    Iyyb = Iyyb + iavgb/2.0 - tempb
+    tempb = 2.0 * Ixy * theta2b / ((-2.0 * Ixy) ** 2 + (Ixx - Iyy) ** 2)
+    Ixxb = Ixxb + iavgb / 2.0 + tempb
+    Iyyb = Iyyb + iavgb / 2.0 - tempb
 
     # Since we cant update scalar values directly like mutable array we need to return also
     return Ixxb, Ixyb, Iyyb
@@ -794,13 +795,15 @@ def sectionModulus_b(nodes, nodesb, Sb=1.0, principalAxes=False):
     yMax = ksFunction(yAbs, rho=300)
 
     # Reverse accumulate derivatives
-    Ipminb = Sb/yMax
-    yMaxb = -(Ipmin*Sb/yMax**2)
+    Ipminb = Sb / yMax
+    yMaxb = -(Ipmin * Sb / yMax**2)
     yAbsb = ksFunction_d(yAbs, rho=300) * yMaxb
 
     invertedMask = np.invert(mask)
     nodesShiftedRotatedb = np.zeros_like(nodesShiftedRotated)
-    nodesShiftedRotatedb[:, 1] = np.where(invertedMask, nodesShiftedRotatedb[:, 1] - yAbsb, nodesShiftedRotatedb[:, 1] + yAbsb)
+    nodesShiftedRotatedb[:, 1] = np.where(
+        invertedMask, nodesShiftedRotatedb[:, 1] - yAbsb, nodesShiftedRotatedb[:, 1] + yAbsb
+    )
     yAbsb = 0.0
 
     nodesShiftedb = np.zeros_like(nodesShifted)
@@ -815,7 +818,9 @@ def sectionModulus_b(nodes, nodesb, Sb=1.0, principalAxes=False):
         alphab = rotation.rotM_b(alpha, Mb)
         thetab = -alphab
 
-        Ixxb, Ixyb, Iyyb = principalAxesSecondMomentArea_b(Ixx, Ixxb, Ixy, Ixyb, Iyy, Iyyb, Ipmaxb=0.0, Ipminb=Ipminb, thetab=thetab)
+        Ixxb, Ixyb, Iyyb = principalAxesSecondMomentArea_b(
+            Ixx, Ixxb, Ixy, Ixyb, Iyy, Iyyb, Ipmaxb=0.0, Ipminb=Ipminb, thetab=thetab
+        )
     else:
         nodesShiftedb = nodesShiftedRotatedb
         Ixxb = Ipminb

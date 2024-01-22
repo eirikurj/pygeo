@@ -5,6 +5,7 @@ Adapted from https://github.com/OpenMDAO/OpenMDAO/blob/master/openmdao/utils/cs_
 
 import numpy as np
 
+
 def abs(x):
     """
     complex-step safe version of numpy.abs function.
@@ -66,4 +67,3 @@ def arctan2(y, x):
         return np.arctan2(a, c) + 1j * (c * b - a * d) / (a**2 + c**2)
     else:
         return np.arctan2(y, x)
-

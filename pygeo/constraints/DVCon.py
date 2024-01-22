@@ -1751,7 +1751,6 @@ class DVConstraints:
             compNames,
         )
 
-
     def addCompositeVolumeConstraint(
         self, vols, lower=1.0, upper=3.0, scaled=True, scale=1.0, name=None, addToPyOpt=True, DVGeoName="default"
     ):
@@ -1842,7 +1841,6 @@ class DVConstraints:
         self.constraints[typeName][conName] = CompositeVolumeConstraint(
             conName, volCons, lower, upper, scaled, scale, self.DVGeometries[DVGeoName], addToPyOpt
         )
-
 
     def addSectionModulusConstraint(
         self,
@@ -1962,7 +1960,17 @@ class DVConstraints:
 
         # Finally add the constraint object
         self.constraints[typeName][conName] = SectionModulusConstraint(
-            conName, nSpan, nChord, coords, principalAxes, lower, upper, scaled, scale, self.DVGeometries[DVGeoName], addToPyOpt
+            conName,
+            nSpan,
+            nChord,
+            coords,
+            principalAxes,
+            lower,
+            upper,
+            scaled,
+            scale,
+            self.DVGeometries[DVGeoName],
+            addToPyOpt,
         )
 
     def addLeTeConstraints(
