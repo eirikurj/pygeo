@@ -86,3 +86,63 @@ def convertTo2D(value, dim1, dim2):
             return value
         else:
             raise ValueError("The size of the 2D array was the incorrect shape")
+
+
+def _ksFunctionCompute(g, rho):
+    """Function to compute intermediate values for the KS function"""
+    # For numerical stability and avoid overflow, we use the shifted version
+    gMax = np.max(g)
+    gDiff = g - gMax
+    exponents = np.exp(rho * gDiff)
+    summation = np.sum(exponents)
+
+    return gMax, exponents, summation
+
+
+def ksFunction(g, rho=100):
+    """Kreisselmeier-Steinhauser (KS) aggregation function. Can be used to aggregate
+    constraint vectors to provide an approximation of the maximum value.
+
+    Parameters
+    ----------
+    g : ndarray (n)
+        Array that should be aggregated
+    rho : float
+        KS aggregation parameter. Larger values will result in aggregated values that
+        are closer to the true maximum.
+
+    Returns
+    -------
+    KS : float
+        KS aggregated value
+    """
+    # Compute intermediate values
+    gMax, _, summation = _ksFunctionCompute(g, rho)
+    # Compute the KS value
+    KS = gMax + 1.0 / rho * np.log(summation)
+
+    return KS
+
+
+def ksFunction_d(g, rho=100):
+    """Analytic derivatives of the Kreisselmeier-Steinhauser (KS) aggregation function.
+
+    Parameters
+    ----------
+    g : ndarray (n)
+        Array that should be aggregated
+    rho : float
+        KS aggregation parameter. Larger values will result in aggregated values that
+        are closer to the true maximum.
+
+    Returns
+    -------
+    dKSdg : float
+        Derivative of KS with respect to input values g.
+    """
+    # Compute intermediate values
+    _, exponents, summation = _ksFunctionCompute(g, rho)
+    # Compute the derivative
+    dKSdg = exponents / summation
+
+    return dKSdg

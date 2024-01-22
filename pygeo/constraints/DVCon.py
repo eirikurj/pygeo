@@ -21,6 +21,7 @@ from .planarityConstraint import PlanarityConstraint
 from .radiusConstraint import RadiusConstraint
 from .thicknessConstraint import ThicknessConstraint, ThicknessToChordConstraint
 from .volumeConstraint import CompositeVolumeConstraint, TriangulatedVolumeConstraint, VolumeConstraint
+from .sectionModulusConstraint import SectionModulusConstraint
 
 
 class DVConstraints:
@@ -1750,6 +1751,7 @@ class DVConstraints:
             compNames,
         )
 
+
     def addCompositeVolumeConstraint(
         self, vols, lower=1.0, upper=3.0, scaled=True, scale=1.0, name=None, addToPyOpt=True, DVGeoName="default"
     ):
@@ -1839,6 +1841,128 @@ class DVConstraints:
                 ) from e
         self.constraints[typeName][conName] = CompositeVolumeConstraint(
             conName, volCons, lower, upper, scaled, scale, self.DVGeometries[DVGeoName], addToPyOpt
+        )
+
+
+    def addSectionModulusConstraint(
+        self,
+        leList,
+        teList,
+        nSpan,
+        nChord,
+        principalAxes=True,
+        lower=1.0,
+        upper=3.0,
+        scaled=True,
+        scale=1.0,
+        name=None,
+        addToPyOpt=True,
+        surfaceName="default",
+        DVGeoName="default",
+    ):
+        r"""
+        Add section modulus constraint S = Ixx / ymax at each slice
+        along the span of a wing.
+
+        Parameters
+        ----------
+        leList : list or array
+            A list or array of points (size should be (Nx3) where N is
+            at least 2) defining the 'leading edge' or the start of the
+            domain
+
+        teList : list or array
+            Same as leList but for the trailing edge.
+
+        nSpan : int
+            The number of constraints along the span to be (linearly)
+            interpolated *along* the leading and trailing edges.
+            Minimum 2
+
+        nChord : int
+            The number of projected points to be (linearly)
+            interpolated between the leading and trailing edges.
+            More points will resolve the section and be more
+
+        principalAxes : bool
+            Compute section modulus in the principal axes. This means that
+            modulus is invariant to rotation or twist. If False the quantities
+            Ixx and ymax are computed in the global reference axes about the centroid.
+
+        lower : float
+            The lower bound for the constraint.
+
+        upper : float or
+            The upper bound for the constraint.
+
+        scaled : bool
+            Flag specifying whether or not the constraint is to be
+            implemented in a scaled fashion or not.
+
+            * scaled=True: The section modulus is normalized to be 1.0.
+              In this case, the lower and upper bounds are given in
+              multiple of the initial value.
+              lower=0.85, upper=1.15, would allow for 15% change in
+              both upper and lower value.
+
+            * scaled=False: No normalization applied and the actual
+              value is used. lower and upper must reflect the actual
+              value.
+
+        scale : float
+            This is the optimization scaling of the
+            constraint. Typically this parameter will not need to be
+            changed. If scaled=True, this automatically results in a
+            well-scaled constraint and scale can be left at 1.0. If
+            scaled=False, it may be changed to a more suitable value if
+            the resulting section modulus magnitude is vastly different
+            from O(1).
+
+        name : str
+            Normally this does not need to be set; a default name will
+            be generated automatically. Only use this if you have
+            multiple DVCon objects and the constraint names need to
+            be distinguished **OR** you are using this section modulus
+            computation for something other than a direct constraint
+            in pyOpt, i.e., it is required for a subsequent
+            computation.
+
+        addToPyOpt : bool
+            Normally this should be left at the default of True if
+            to be used as a constraint. If the section modulus is to be
+            used in a subsequent calculation and not a constraint
+            directly, addToPyOpt should be False, and name
+            specified to a logical name for this computation. With
+            addToPyOpt=False, the lower, upper and scale variables are
+            meaningless
+
+        surfaceName : str
+            Name of the surface to project to. This should be the same
+            as the surfaceName provided when setSurface() was called.
+            For backward compatibility, the name is 'default' by default.
+
+        DVGeoName : str
+            Name of the DVGeo object to compute the constraint with. You only
+            need to set this if you're using multiple DVGeo objects
+            for a problem. For backward compatibility, the name is 'default' by default
+        """
+        self._checkDVGeo(DVGeoName)
+
+        typeName = "sectionModulusCon"
+        if typeName not in self.constraints:
+            self.constraints[typeName] = OrderedDict()
+
+        if name is None:
+            conName = "%s_section_modulus_constraint_%d" % (self.name, len(self.constraints[typeName]))
+        else:
+            conName = name
+
+        coords = self._generateIntersections(leList, teList, nSpan, nChord, surfaceName)
+        coords = coords.reshape((nSpan * nChord * 2, 3))
+
+        # Finally add the constraint object
+        self.constraints[typeName][conName] = SectionModulusConstraint(
+            conName, nSpan, nChord, coords, principalAxes, lower, upper, scaled, scale, self.DVGeometries[DVGeoName], addToPyOpt
         )
 
     def addLeTeConstraints(

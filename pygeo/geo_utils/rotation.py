@@ -27,6 +27,70 @@ def rotzM(theta):
     return M
 
 
+def rotzM_d(theta, thetad):
+    """Derivative of z rotation matrix"""
+    theta = theta * np.pi / 180
+    thetad = thetad * np.pi / 180
+    Md = np.array(
+        [
+            [-np.sin(theta) * thetad, -np.cos(theta) * thetad, 0],
+            [np.cos(theta) * thetad, -np.sin(theta) * thetad, 0],
+            [0, 0, 0],
+        ]
+    )
+    return Md
+
+
+def rotzM_b(theta, Mb):
+    """Reverse derivative of z rotation matrix"""
+    theta = theta * np.pi / 180
+    thetab = np.cos(theta) * Mb[1, 0] - np.sin(theta) * Mb[1, 1] - np.cos(theta) * Mb[0, 1] - np.sin(theta) * Mb[0, 0]
+    thetab = thetab * np.pi / 180
+    return thetab
+
+
+def rotM(theta):
+    """Return a planar (2D) rotation matrix"""
+    M = np.array(rotzM(theta))[:2, :2]
+    return M
+
+
+def rotM_d(theta, thetad):
+    """Derivative of planar (2D) rotation matrix"""
+    M = rotzM_d(theta, thetad)[:2, :2]
+    return M
+
+
+def rotM_b(theta, Mb):
+    """Reverse derivative of planar (2D) rotation matrix"""
+    thetab = rotzM_b(theta, Mb)
+    return thetab
+
+
+def rotate(coords, M):
+    """Rotates given coordinates using the rotation matrix M in the local reference frame"""
+    coordsRotated = np.zeros_like(coords)
+    for i, coord in enumerate(coords):
+        coordsRotated[i] = np.dot(M, coord)
+    return coordsRotated
+
+
+def rotate_d(coords, coordsd, M, Md):
+    """Derivative of rotating coordinates using the rotation matrix M in the local reference frame"""
+    coordsRotatedd = np.zeros_like(coordsd)
+    for i, (coord, coordd) in enumerate(zip(coords, coordsd)):
+        coordsRotatedd[i] = np.dot(Md, coord) + np.dot(M, coordd)
+    return coordsRotatedd
+
+
+def rotate_b(coords, coordsb, M, Mb, coordsRotatedb):
+    """Reverse derivative rotating coordinates using the rotation matrix M in the local reference frame"""
+    N = coords.shape[0]
+    for i in range(N - 1, -1, -1):
+        Mb += np.outer(coordsRotatedb[i], coords[i])
+        coordsb[i] += np.dot(coordsRotatedb[i], M)
+
+
 def rotxV(x, theta):
     """Rotate a coordinate in the local x frame"""
     M = [[1, 0, 0], [0, np.cos(theta), -np.sin(theta)], [0, np.sin(theta), np.cos(theta)]]
