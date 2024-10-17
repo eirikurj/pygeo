@@ -20,13 +20,10 @@ from .locationConstraint import LocationConstraint
 from .planarityConstraint import PlanarityConstraint
 from .radiusConstraint import RadiusConstraint
 from .thicknessConstraint import (
-<<<<<<< HEAD
     KSMaxThicknessToChordConstraint,
     TESlopeConstraint,
-=======
     ProjectedThicknessConstraint,
     ProximityConstraint,
->>>>>>> main
     ThicknessConstraint,
     ThicknessToChordConstraint,
 )
