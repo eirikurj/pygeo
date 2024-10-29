@@ -286,4 +286,4 @@ class CompositeVolumeConstraint(GeometricConstraint):
                     funcsSens[self.name][key] += tmp[i][key]
 
     def writeTecplot(self, handle):
-        raise NotImplementedError()
+        pass

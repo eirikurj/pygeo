@@ -759,6 +759,7 @@ class DVConstraints:
         constr_line = Curve(X=ptList, k=2)
         s = np.linspace(0, 1, nCon)
         X = constr_line(s)
+        X = np.atleast_2d(X)
         coords = np.zeros((nCon, 2, 3))
         # Project all the points
         for i in range(nCon):
