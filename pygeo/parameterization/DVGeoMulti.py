@@ -64,6 +64,8 @@ class DVGeometryMulti:
         self.checkDVs = checkDVs
         self.debug = debug
         self.complex = isComplex
+        self.curConfig = None
+        self.updateICs = True
 
         # Set real or complex Fortran API
         if isComplex:
@@ -514,10 +516,9 @@ class DVGeometryMulti:
         for comp in self.compNames:
             self.comps[comp].DVGeo.setDesignVars(dvDict)
 
-        # We need to give the updated coordinates to each of the
-        # intersectComps (if we have any) so they can update the new intersection curve
-        for IC in self.intersectComps:
-            IC.setSurface(self.comm)
+        # set the current config as None, we cannot know what config the user wants until the update call
+        self.curConfig = None
+        self.updateICs = True
 
         # Flag all the pointSets as not being up to date:
         for pointSet in self.updated:
@@ -558,12 +559,19 @@ class DVGeometryMulti:
 
         """
 
+        # check if the ICs are up to date with the current config
+        if self.updateICs or config != self.curConfig:
+            print("config from update", config)
+            self._setICSurfaces(config)
+            self.updateICs = False
+            self.curConfig = config
+
         # get the new points
         newPts = np.zeros((self.points[ptSetName].nPts, 3), dtype=self.dtype)
 
         # we first need to update all points with their respective DVGeo objects
         for comp in self.compNames:
-            ptsComp = self.comps[comp].DVGeo.update(ptSetName)
+            ptsComp = self.comps[comp].DVGeo.update(ptSetName, config=config)
 
             # now save this info with the pointset mapping
             ptMap = self.points[ptSetName].compMap[comp]
@@ -682,8 +690,14 @@ class DVGeometryMulti:
 
         """
 
+        # check if the ICs are up to date with the current config
+        if self.updateICs or config != self.curConfig:
+            self._setICSurfaces(config)
+            self.updateICs = False
+            self.curConfig = config
+
         # Compute the total Jacobian for this point set
-        self._computeTotalJacobian(ptSetName)
+        self._computeTotalJacobian(ptSetName, config)
 
         # Make dIdpt at least 3D
         if len(dIdpt.shape) == 2:
@@ -704,7 +718,7 @@ class DVGeometryMulti:
                 # we pass in dIdpt and the intersection object, along with pointset information
                 # the intersection object adjusts the entries corresponding to projected points
                 # and passes back dIdpt in place.
-                compSens = IC.project_b(ptSetName, dIdpt, comm)
+                compSens = IC.project_b(ptSetName, dIdpt, comm, config)
 
                 # append this to the dictionary list...
                 compSensList.append(compSens)
@@ -718,7 +732,7 @@ class DVGeometryMulti:
         # communication is easier and we can reduce compSens as we compute them
         for IC in self.intersectComps:
             if ptSetName in IC.points:
-                compSens = IC.sens(dIdpt, ptSetName, comm)
+                compSens = IC.sens(dIdpt, ptSetName, comm, config)
                 # save the sensitivities from the intersection stuff
                 compSensList.append(compSens)
 
@@ -895,7 +909,7 @@ class DVGeometryMulti:
 
         return nodes, triConn, triConnStack, barsConn
 
-    def _computeTotalJacobian(self, ptSetName):
+    def _computeTotalJacobian(self, ptSetName, config):
         """
         This routine computes the total jacobian. It takes the jacobians
         from respective DVGeo objects and also computes the jacobians for
@@ -920,7 +934,7 @@ class DVGeometryMulti:
             nDVComp = self.comps[comp].DVGeo.getNDV()
 
             # call the function to compute the total jacobian
-            self.comps[comp].DVGeo.computeTotalJacobian(ptSetName)
+            self.comps[comp].DVGeo.computeTotalJacobian(ptSetName, config)
 
             if self.comps[comp].DVGeo.JT[ptSetName] is not None:
                 # Get the component Jacobian
@@ -937,6 +951,14 @@ class DVGeometryMulti:
 
         # now we can save this jacobian in the pointset
         ptSet.jac = jac
+
+    def _setICSurfaces(self, config):
+        # updates the ICs with the given config
+
+        # We need to give the updated coordinates to each of the
+        # intersectComps (if we have any) so they can update the new intersection curve
+        for IC in self.intersectComps:
+            IC.setSurface(self.comm, config)
 
 
 class component:
@@ -961,7 +983,7 @@ class component:
         else:
             self.triMesh = True
 
-    def updateTriMesh(self, comm):
+    def updateTriMesh(self, comm, config):
         # We need the full triangulated surface for this component
         # Get the stored processor splitting information
         sizes = self.triMeshData["sizes"]
@@ -969,7 +991,7 @@ class component:
         nPts = disp[-1]
 
         # Update the triangulated surface mesh to get the points on this processor
-        procNodes = self.DVGeo.update("triMesh")
+        procNodes = self.DVGeo.update("triMesh", config=config)
 
         # Create the send buffer
         procNodes = procNodes.flatten()
@@ -1036,6 +1058,7 @@ class CompIntersection:
 
         # same communicator with DVGeo
         self.comm = DVGeo.comm
+        self.curConfigText = ""
 
         # define epsilon as a small value to prevent division by zero in the inverse distance computation
         self.eps = 1e-20
@@ -1217,11 +1240,14 @@ class CompIntersection:
         self.seam0 = self._getIntersectionSeam(self.comm, firstCall=True)
         self.seam = self.seam0.copy()
 
-    def setSurface(self, comm):
+    def setSurface(self, comm, config):
         """This set the new udpated surface on which we need to compute the new intersection curve"""
 
+        if config is not None:
+            self.curConfigText = f"_{config}"
+
         # get the updated surface coordinates
-        self._getUpdatedCoords(comm)
+        self._getUpdatedCoords(comm, config)
 
         self.seam = self._getIntersectionSeam(comm)
 
@@ -1494,7 +1520,7 @@ class CompIntersection:
                     if self.debug:
                         ptCoords = ptsToCurves[idxs]
                         tecplot_interface.write_tecplot_scatter(
-                            f"{curveName}.plt", curveName, ["X", "Y", "Z"], ptCoords
+                            f"{curveName}{self.curConfigText}.plt", curveName, ["X", "Y", "Z"], ptCoords
                         )
 
                     # also update the masking array
@@ -1648,7 +1674,7 @@ class CompIntersection:
 
         return delta
 
-    def sens(self, dIdPt, ptSetName, comm):
+    def sens(self, dIdPt, ptSetName, comm, config):
         # Return the reverse accumulation of dIdpt on the seam
         # nodes. Also modifies the dIdp array accordingly.
 
@@ -1741,7 +1767,7 @@ class CompIntersection:
         # seamBar is the bwd seeds for the intersection curve...
         # it is N,nseampt,3 in size
         # now call the reverse differentiated seam computation
-        compSens = self._getIntersectionSeam_b(seamBar, comm)
+        compSens = self._getIntersectionSeam_b(seamBar, comm, config)
 
         return compSens
 
@@ -1794,7 +1820,7 @@ class CompIntersection:
 
             if self.debug:
                 tecplot_interface.write_tecplot_scatter(
-                    f"{curveName}_warped_pts.plt", "intersection", ["X", "Y", "Z"], ptsOnCurve
+                    f"{curveName}_warped_pts{self.curConfigText}.plt", "intersection", ["X", "Y", "Z"], ptsOnCurve
                 )
 
             # conn of the current curve
@@ -1846,7 +1872,7 @@ class CompIntersection:
 
             if self.debug:
                 tecplot_interface.write_tecplot_scatter(
-                    f"{curveName}_projected_pts.plt", curveName, ["X", "Y", "Z"], xyzProj
+                    f"{curveName}_projected_pts{self.curConfigText}.plt", curveName, ["X", "Y", "Z"], xyzProj
                 )
 
             # update the point coordinates on this processor.
@@ -1964,7 +1990,7 @@ class CompIntersection:
                 ptsB = newPts[indBComp]
                 newPts[indBComp] = self._projectToComponent(ptsB, self.compB, self.projData[ptSetName]["compB"])
 
-    def project_b(self, ptSetName, dIdpt, comm):
+    def project_b(self, ptSetName, dIdpt, comm, config):
         # call the functions to propagate ad seeds bwd
         # we need to build ADTs for both components if we have any components that lie on either
         # we also need to save ALL intermediate variables for gradient computations in reverse mode
@@ -2022,7 +2048,7 @@ class CompIntersection:
         dIdptTriA = dIdptTriA[:, disp[self.comm.rank] : disp[self.comm.rank + 1], :]
 
         # Call the total sensitivity of the component's DVGeo
-        compSensA = self.compA.DVGeo.totalSensitivity(dIdptTriA, "triMesh")
+        compSensA = self.compA.DVGeo.totalSensitivity(dIdptTriA, "triMesh", config=config)
 
         for k, v in compSensA.items():
             compSens_local[k] = v
@@ -2054,7 +2080,7 @@ class CompIntersection:
         dIdptTriB = self.comm.allreduce(dIdptTriB)
         disp = self.compB.triMeshData["disp"]
         dIdptTriB = dIdptTriB[:, disp[self.comm.rank] : disp[self.comm.rank + 1], :]
-        compSensB = self.compB.DVGeo.totalSensitivity(dIdptTriB, "triMesh")
+        compSensB = self.compB.DVGeo.totalSensitivity(dIdptTriB, "triMesh", config=config)
         for k, v in compSensB.items():
             compSens_local[k] = v
 
@@ -2499,14 +2525,14 @@ class CompIntersection:
         # We also return the seeds for the component's triangulated mesh in dIdptTri
         return dIdpt, dIdptTri
 
-    def _getUpdatedCoords(self, comm):
+    def _getUpdatedCoords(self, comm, config):
         # this code returns the updated coordinates
 
         # first comp a
-        self.compA.updateTriMesh(comm)
+        self.compA.updateTriMesh(comm, config)
 
         # then comp b
-        self.compB.updateTriMesh(comm)
+        self.compB.updateTriMesh(comm, config)
 
         return
 
@@ -2571,7 +2597,7 @@ class CompIntersection:
             if self.intDir is None:
                 # we have multiple intersection curves but the user did not specify which direction to pick
                 for i in range(len(newConn)):
-                    curvename = f"{self.compA.name}_{self.compB.name}_{i}"
+                    curvename = f"{self.compA.name}_{self.compB.name}_{i}{self.curConfigText}"
                     tecplot_interface.writeTecplotFEdata(intNodes, newConn[i], curvename, curvename)
                 raise Error(
                     f"More than one intersection curve between comps {self.compA.name} and {self.compB.name}. "
@@ -2771,7 +2797,7 @@ class CompIntersection:
 
         # Output the intersection curve
         if self.comm.rank == 0 and self.debug:
-            curvename = f"{self.compA.name}_{self.compB.name}_{self.counter}"
+            curvename = f"{self.compA.name}_{self.compB.name}_{self.counter}{self.curConfigText}"
             tecplot_interface.writeTecplotFEdata(intNodes, seamConn, curvename, curvename)
 
         # we need to re-mesh feature curves if the user wants...
@@ -2967,7 +2993,7 @@ class CompIntersection:
 
             # Output the feature curves
             if self.comm.rank == 0 and self.debug:
-                curvename = f"featureCurves_{self.counter}"
+                curvename = f"featureCurves_{self.counter}{self.curConfigText}"
                 tecplot_interface.writeTecplotFEdata(remeshedCurves, remeshedCurveConnFull, curvename, curvename)
 
             # now we are done going over curves,
@@ -2991,7 +3017,7 @@ class CompIntersection:
 
         return seam.copy()
 
-    def _getIntersectionSeam_b(self, seamBar, comm):
+    def _getIntersectionSeam_b(self, seamBar, comm, config):
         # seamBar contains all the bwd seeds for all coordinates in self.seam
 
         # seam bar has shape [N, nSeamPt, 3]
@@ -3251,11 +3277,11 @@ class CompIntersection:
 
         # get the total sensitivities from both components
         compSens_local = {}
-        compSensA = self.compA.DVGeo.totalSensitivity(coorAb, "triMesh")
+        compSensA = self.compA.DVGeo.totalSensitivity(coorAb, "triMesh", config=config)
         for k, v in compSensA.items():
             compSens_local[k] = v
 
-        compSensB = self.compB.DVGeo.totalSensitivity(coorBb, "triMesh")
+        compSensB = self.compB.DVGeo.totalSensitivity(coorBb, "triMesh", config=config)
         for k, v in compSensB.items():
             compSens_local[k] = v
 
@@ -3293,7 +3319,7 @@ class CompIntersection:
         if self.debug:
             data = [np.append(points[i], surfaceDist[i]) for i in surfaceIndMap]
             tecplot_interface.write_tecplot_scatter(
-                f"{surface}_points_{self.comm.rank}.plt", f"{surface}", ["X", "Y", "Z", "dist"], data
+                f"{surface}_points_{self.comm.rank}{self.curConfigText}.plt", f"{surface}", ["X", "Y", "Z", "dist"], data
             )
 
         # Save the indices only if there is at least one point
