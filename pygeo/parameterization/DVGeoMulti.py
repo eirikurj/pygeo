@@ -690,13 +690,12 @@ class DVGeometryMulti:
 
         """
 
-        # check if the ICs are up to date with the current config
-        if self.updateICs or config != self.curConfig:
-            # also need to run a full update here
-            # this will set self.updateICs to False and
-            # self.curConfig to config. It will also
-            # update the underlying data for the intersections
-            self.update(ptSetName, config=config)
+        # TODO temporary solution. Ideally, we may want to track configs per pointset
+        # need to run a full update here
+        # this will set self.updateICs to False and
+        # self.curConfig to config. It will also
+        # update the underlying data for the intersections
+        self.update(ptSetName, config=config)
 
         # Compute the total Jacobian for this point set
         self._computeTotalJacobian(ptSetName, config)
