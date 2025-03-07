@@ -36,7 +36,7 @@ class KSfunction(object):
         return g_max, g_diff, exponents, summation
 
     @staticmethod
-    def compute(g, rho=50.0):
+    def compute(g, rho=50.0, approach="above"):
         """
         Compute the value of the KS function for the given array of constraints.
 
@@ -46,6 +46,8 @@ class KSfunction(object):
             Array of constraint values, where negative means satisfied and positive means violated.
         rho : float
             Constraint Aggregation Factor.
+        lower : str, optional
+            If 'above', the max is approached from above, if 'below', the max is approached from below.
 
         Returns
         -------
@@ -54,12 +56,17 @@ class KSfunction(object):
         """
         g_max, g_diff, exponents, summation = KSfunction._compute_values(g, rho)
 
-        KS = g_max + 1.0 / rho * np.log(summation)
+        if approach.lower() == "above":
+            KS = g_max + 1.0 / rho * np.log(summation)
+        elif approach.lower() == "below":
+            KS = g_max - 1.0 / rho * np.log(summation)
+        else:
+            raise ValueError("Invalid approach type. Must be 'above' or 'below'.")
 
         return KS
 
     @staticmethod
-    def derivatives(g, rho=50.0):
+    def derivatives(g, rho=50.0, approach="above"):
         """
         Compute elements of [dKS_gd, dKS_drho] for the given array of constraints.
 
@@ -69,6 +76,8 @@ class KSfunction(object):
             Array of constraint values, where negative means satisfied and positive means violated.
         rho : float
             Constraint Aggregation Factor.
+        approach : str, optional
+            If 'above', the max is approached from above, if 'below', the max is approached from below.
 
         Returns
         -------
@@ -84,7 +93,12 @@ class KSfunction(object):
         dsum_drho = np.sum(np.multiply(g_diff, exponents))
         dKS_drho = dKS_dsum * dsum_drho
 
-        return dKS_dg, dKS_drho
+        if approach.lower() == "above":
+            return dKS_dg, dKS_drho
+        elif approach.lower() == "below":
+            return -1 * dKS_dg, dKS_drho
+        else:
+            raise ValueError("Invalid approach type. Must be 'above' or 'below'.")
 
 
 def area2(hedge, point):

@@ -310,7 +310,23 @@ class KSMaxThicknessToChordConstraint(GeometricConstraint):
     not have to deal with this class directly.
     """
 
-    def __init__(self, name, coords, lePt, tePt, rho, divideByChord, lower, upper, scaled, scale, DVGeo, addToPyOpt, compNames):
+    def __init__(
+        self,
+        name,
+        coords,
+        lePt,
+        tePt,
+        rho,
+        ksApproach,
+        divideByChord,
+        lower,
+        upper,
+        scaled,
+        scale,
+        DVGeo,
+        addToPyOpt,
+        compNames,
+    ):
         self.nPoint = len(coords) // 2
         super().__init__(name, 1, lower, upper, scale, DVGeo, addToPyOpt)
 
@@ -318,6 +334,7 @@ class KSMaxThicknessToChordConstraint(GeometricConstraint):
         self.leTePts = np.array([lePt, tePt])
         self.scaled = scaled
         self.rho = rho
+        self.ksApproach = ksApproach
         self.divideByChord = divideByChord
 
         # Embed the coordinates
@@ -338,7 +355,7 @@ class KSMaxThicknessToChordConstraint(GeometricConstraint):
                 self.ToC0[i] = t
 
         # Compute the absolute t/c at the baseline
-        self.max0 = geo_utils.KSfunction.compute(self.ToC0, self.rho)
+        self.max0 = geo_utils.KSfunction.compute(self.ToC0, self.rho, self.ksApproach)
 
     def evalFunctions(self, funcs, config):
         """
@@ -368,7 +385,7 @@ class KSMaxThicknessToChordConstraint(GeometricConstraint):
                 ToC[i] = t
 
         # Now we want to take the KS max over the toothpicks
-        maxToC = geo_utils.KSfunction.compute(ToC, self.rho)
+        maxToC = geo_utils.KSfunction.compute(ToC, self.rho, self.ksApproach)
 
         if self.scaled:
             maxToC /= self.max0
@@ -421,7 +438,7 @@ class KSMaxThicknessToChordConstraint(GeometricConstraint):
                     dToCdCoords[i, 1] = p2b
 
             # Get the derivative of the ks function with respect to the t/c constraints
-            dKSdToC, _ = geo_utils.KSfunction.derivatives(ToC, self.rho)
+            dKSdToC, _ = geo_utils.KSfunction.derivatives(ToC, self.rho, self.ksApproach)
 
             if self.scaled:
                 # If scaled divide by the initial t/c value

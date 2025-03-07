@@ -3451,6 +3451,7 @@ class DVConstraints:
         conType="full_chord",
         divideByChord=True,
         rho=1000.0,
+        ksApproach="above",
         lower=None,
         upper=None,
         scale=1.0,
@@ -3508,6 +3509,12 @@ class DVConstraints:
             esitmates and larger values will more closely approximate
             the maximum, by default 1000.0
 
+        ksApproach : str, optional
+            The direction the KS function should approach the maximum.
+            Options are 'above' or 'below'.  If 'above', the KS function
+            will approach the maximum from above.  If 'below', the KS
+            function will approach the maximum from below, by default 'above'
+
         lower : float, optional
             The lower bound, by default 1.0
 
@@ -3560,6 +3567,9 @@ class DVConstraints:
         """
         self._checkDVGeo(DVGeoName)
 
+        if ksApproach.lower() not in ["above", "below"]:
+            raise Error(f"ksApproach should be 'above' or 'below', not {ksApproach}")
+
         p0, p1, p2 = self._getSurfaceVertices(surfaceName=surfaceName)
 
         # Initialize the coordinates
@@ -3609,6 +3619,7 @@ class DVConstraints:
             np.array(lePt),
             np.array(tePt),
             rho,
+            ksApproach,
             divideByChord,
             lower,
             upper,
