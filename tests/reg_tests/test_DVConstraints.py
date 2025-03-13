@@ -2,11 +2,12 @@
 import os
 import unittest
 
+import numpy as np
+
 # External modules
 from baseclasses import BaseRegTest
 from baseclasses.utils import Error as baseclassesError
 from mpi4py import MPI
-import numpy as np
 from parameterized import parameterized_class
 from stl import mesh
 
@@ -662,15 +663,15 @@ class RegTestPyGeo(unittest.TestCase):
 
             funcs, funcsSens = self.wing_test_deformed(DVGeo, DVCon, handler)
 
-    def test_ksToC(self, train=False, refDeriv=False):
-        refFile = os.path.join(self.base_path, "ref/test_DVConstraints_ksToC.ref")
+    def test_ksToC_above(self, train=False, refDeriv=False):
+        refFile = os.path.join(self.base_path, "ref/test_DVConstraints_ksToC_above.ref")
         with BaseRegTest(refFile, train=train) as handler:
             DVGeo, DVCon = self.generate_dvgeo_dvcon("box")
 
             lePt = [0.0, 0.0, 0.0]
             tePt = [0.0, 0.0, 8.0]
 
-            DVCon.addKSMaxThicknessToChordConstraint(lePt, tePt, [0, 1, 0], scaled=True, rho=1000.0)
+            DVCon.addKSMaxThicknessToChordConstraint(lePt, tePt, [0, 1, 0], scaled=True, rho=1000.0, ksApproach="above")
 
             DVCon.addKSMaxThicknessToChordConstraint(
                 lePt,
@@ -679,9 +680,51 @@ class RegTestPyGeo(unittest.TestCase):
                 scaled=False,
                 rho=1000.0,
                 divideByChord=False,
+                ksApproach="above",
             )
 
             funcs, funcsSens = generic_test_base(DVGeo, DVCon, handler)
+
+            handler.assert_allclose(
+                funcs["DVCon1_ksmax_thickness_to_chord_constraints_0"].flatten(),
+                np.array([1.0]),
+                name="teKSFull_base",
+                rtol=1e-8,
+                atol=1e-8,
+            )
+
+            funcs, funcsSens = self.wing_test_twist(DVGeo, DVCon, handler)
+            handler.assert_allclose(
+                funcs["DVCon1_ksmax_thickness_to_chord_constraints_0"].flatten(),
+                np.array([1.0]),
+                name="teKSFull_twisted",
+                rtol=1e-2,
+                atol=1e-2,
+            )
+
+            funcs, funcsSens = self.wing_test_deformed(DVGeo, DVCon, handler)
+
+    def test_ksToC_below(self, train=True, refDeriv=False):
+        refFile = os.path.join(self.base_path, "ref/test_DVConstraints_ksToC_below.ref")
+        with BaseRegTest(refFile, train=train) as handler:
+            DVGeo, DVCon = self.generate_dvgeo_dvcon("box")
+
+            lePt = [0.0, 0.0, 0.0]
+            tePt = [0.0, 0.0, 8.0]
+
+            DVCon.addKSMaxThicknessToChordConstraint(lePt, tePt, [0, 1, 0], scaled=True, rho=1000.0, ksApproach="below")
+
+            DVCon.addKSMaxThicknessToChordConstraint(
+                lePt,
+                tePt,
+                [0, 1, 0],
+                scaled=False,
+                rho=1000.0,
+                divideByChord=False,
+                ksApproach="below",
+            )
+
+            funcs, funcsSens = generic_test_base(DVGeo, DVCon, handler, checkDerivs=False)
 
             handler.assert_allclose(
                 funcs["DVCon1_ksmax_thickness_to_chord_constraints_0"].flatten(),
