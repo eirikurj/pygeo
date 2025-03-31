@@ -7,6 +7,7 @@ from mpi4py import MPI
 import numpy as np
 from scipy import sparse
 
+from pygeo.geo_utils import readNValues
 try:
     # External modules
     from pysurf import (
@@ -20,6 +21,7 @@ except ImportError:
     pysurfInstalled = False
 
 from .CompIntersection import ComponentIntersection
+from .WarpIntersection import WarpedIntersection
 
 
 class DVGeometryMulti:
@@ -188,6 +190,7 @@ class DVGeometryMulti:
         excludeSurfaces=None,
         remeshBwd=True,
         anisotropy=[1.0, 1.0, 1.0],
+        blendOrder=3,
     ):
         """
         Method that defines intersections between components.
@@ -267,6 +270,16 @@ class DVGeometryMulti:
             This tends to increase the mesh quality in one direction at the expense of other directions.
             This can be useful when the initial intersection curve is skewed.
 
+        blendOrder : float, optional
+            Power to use in the blending function.
+            Default is 3, which will result in a cubic blend function.
+            Typical values are between 1 and 3.
+            This option controls how the intersection changes are blended into the rest of the shape.
+            A higher blend order will preserve the mesh angles near the intersection better, but will provide a smaller range of motion.
+            Linear blend (order 1) will provide the maximum range of motion, but the mesh will get skewed near the intersection.
+            A unique benefit of the cubic blend is that it will maintain G2 continuity of the affected area and its boundaries.
+            # TODO check if this last statement is true. maybe we can modify the functions so that any order higher than 2-3 results in continuous curvature
+
         """
 
         # Assign mutable defaults
@@ -301,6 +314,78 @@ class DVGeometryMulti:
                 excludeSurfaces,
                 remeshBwd,
                 anisotropy,
+                blendOrder,
+                self.debug,
+                self.dtype,
+            )
+        )
+
+    def addWarpedIntersection(
+        self,
+        compA,
+        compB,
+        intersectionFile,
+        dStarA=0.2,
+        dStarB=0.2,
+        anisotropy=[1.0, 1.0, 1.0],
+        blendOrder=3,
+    ):
+        """
+        Method that defines intersections between components.
+
+        Parameters
+        ----------
+        compA : str
+            The name of the first component.
+
+        compB : str
+            The name of the second component.
+
+        intersectionFile : str
+            Path for the file defining the intersection curve.
+            Must be in Plot3D format.
+
+        dStarA : float, optional
+            Distance from the intersection over which the inverse-distance deformation is applied on compA.
+
+        dStarB : float, optional
+            Distance from the intersection over which the inverse-distance deformation is applied on compB.
+
+        anisotropy : list of float, optional
+            List with three entries specifying scaling factors in the [x, y, z] directions.
+            The factors multiply the [x, y, z] distances used in the curve-based deformation.
+            Smaller factors in a certain direction will amplify the effect of the parts of the curve
+            that lie in that direction from the points being warped.
+            This tends to increase the mesh quality in one direction at the expense of other directions.
+            This can be useful when the initial intersection curve is skewed.
+
+        blendOrder : float, optional
+            Power to use in the blending function.
+            Default is 3, which will result in a cubic blend function.
+            Typical values are between 1 and 3.
+            This option controls how the intersection changes are blended into the rest of the shape.
+            A higher blend order will preserve the mesh angles near the intersection better, but will provide a smaller range of motion.
+            Linear blend (order 1) will provide the maximum range of motion, but the mesh will get skewed near the intersection.
+            A unique benefit of the cubic blend is that it will maintain G2 continuity of the affected area and its boundaries.
+            # TODO check if this last statement is true. maybe we can modify the functions so that any order higher than 2-3 results in continuous curvature
+
+        """
+
+        # read the plot3d curve
+        nodes, barsConn = self._readP3DCurve(intersectionFile)
+
+        # initialize the intersection object
+        self.intersectComps.append(
+            WarpedIntersection(
+                compA,
+                compB,
+                dStarA,
+                dStarB,
+                nodes,
+                barsConn,
+                self,
+                anisotropy,
+                blendOrder,
                 self.debug,
                 self.dtype,
             )
@@ -339,6 +424,8 @@ class DVGeometryMulti:
         # if compList is not provided, we use all components
         if compNames is None:
             compNames = self.compNames
+
+        points = np.atleast_2d(points)
 
         # before we do anything, we need to create surface ADTs
         # for which the user provided triangulated meshes
@@ -903,6 +990,62 @@ class DVGeometryMulti:
         barsConn = self.comm.bcast(barsConn, root=0)
 
         return nodes, triConn, triConnStack, barsConn
+
+    def _readP3DCurve(self, filename):
+
+        def readplot3d(fileName):
+            order="f"
+            binary = False
+            f = open(fileName)
+            nVol = readNValues(f, 1, "int", False)[0]
+            sizes = readNValues(f, nVol * 3, "int", False).reshape((nVol, 3))
+            blocks = []
+            for i in range(nVol):
+                cur_size = sizes[i, 0] * sizes[i, 1] * sizes[i, 2]
+                blocks.append(np.zeros([sizes[i, 0], sizes[i, 1], sizes[i, 2], 3]))
+                for idim in range(3):
+                    blocks[-1][:, :, :, idim] = readNValues(f, cur_size, "float", binary).reshape(
+                        (sizes[i, 0], sizes[i, 1], sizes[i, 2]), order=order
+                    )
+            f.close()
+
+            return blocks
+
+        if self.comm.rank == 0:
+            p3dblocks = readplot3d(filename)
+
+            # each "block" has implied connectivity and ordered set of nodes
+            # we will stack these nodes and connectivities in this array
+            nodes = np.zeros((0, 3))
+            barsConn = np.zeros((0, 2), dtype="int32")
+            for block in p3dblocks:
+                # squeeze out the unused axes. this is just a curve so its nPoint, 3
+                blockNodes = block.squeeze()
+                nNode = blockNodes.shape[0]
+                # first vstack the nodes
+                nodes = np.vstack((nodes, blockNodes))
+                # then create a local connectivity array for this curve only
+                barsConnLocal = np.zeros((nNode - 1, 2), dtype="int32")
+                barsConnLocal[:, 0] = np.arange(nNode - 1)
+                barsConnLocal[:, 1] = barsConnLocal[:, 0] + 1
+
+                # now increment by the last node count
+                if barsConn.shape[0] > 0:
+                    barsConnLocal += barsConn[-1, 1] + 1
+
+                # finally, vstack with barsConn
+                barsConn = np.vstack((barsConn, barsConnLocal))
+
+        else:
+            # create these to recieve the data
+            nodes = None
+            barsConn = None
+
+        # each proc gets the nodes and connectivities
+        nodes = self.comm.bcast(nodes, root=0)
+        barsConn = self.comm.bcast(barsConn, root=0)
+
+        return nodes, barsConn
 
     def _computeTotalJacobian(self, ptSetName, config):
         """
