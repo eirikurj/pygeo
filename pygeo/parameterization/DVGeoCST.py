@@ -20,13 +20,16 @@ try:
 except ImportError:
     prefoilInstalled = False
 
-try:
-    # External modules
-    import matplotlib.pyplot as plt
-
-    pltImport = True
-except ImportError:
-    pltImport = False
+# Only use matplotlib on global root proc.
+pltImport = False
+if MPI.COMM_WORLD.rank == 0:
+    try:
+        # External modules
+        import matplotlib.pyplot as plt
+        pltImport = True
+    except ImportError:
+        # Do nothing, just continue as pltImport should be at its default value
+        pass
 
 # Local modules
 from .BaseDVGeo import BaseDVGeometry
@@ -116,7 +119,7 @@ class DVGeometryCST(BaseDVGeometry):
             self.dtype = float
             self.dtypeMPI = MPI.DOUBLE
         self.debug = debug
-        if debug and not pltImport:
+        if debug and not pltImport and self.comm.rank == 0:
             raise ImportError("matplotlib.pyplot could not be imported and is required for DVGeoCST debug mode")
 
         # Error check the numCST input
