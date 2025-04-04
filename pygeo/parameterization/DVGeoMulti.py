@@ -294,6 +294,8 @@ class DVGeometryMulti:
         if excludeSurfaces is None:
             excludeSurfaces = {}
 
+        nIC = len(self.intersectComps)
+
         # just initialize the intersection object
         self.intersectComps.append(
             ComponentIntersection(
@@ -317,6 +319,7 @@ class DVGeometryMulti:
                 blendOrder,
                 self.debug,
                 self.dtype,
+                nIC,
             )
         )
 
@@ -374,6 +377,8 @@ class DVGeometryMulti:
         # read the plot3d curve
         nodes, barsConn = self._readP3DCurve(intersectionFile)
 
+        nIC = len(self.intersectComps)
+
         # initialize the intersection object
         self.intersectComps.append(
             WarpedIntersection(
@@ -388,6 +393,7 @@ class DVGeometryMulti:
                 blendOrder,
                 self.debug,
                 self.dtype,
+                nIC,
             )
         )
 
@@ -425,6 +431,7 @@ class DVGeometryMulti:
         if compNames is None:
             compNames = self.compNames
 
+        # make the input at least 2d in case a single test point is passed
         points = np.atleast_2d(points)
 
         # before we do anything, we need to create surface ADTs
@@ -1022,16 +1029,16 @@ class DVGeometryMulti:
                 # squeeze out the unused axes. this is just a curve so its nPoint, 3
                 blockNodes = block.squeeze()
                 nNode = blockNodes.shape[0]
-                # first vstack the nodes
-                nodes = np.vstack((nodes, blockNodes))
                 # then create a local connectivity array for this curve only
                 barsConnLocal = np.zeros((nNode - 1, 2), dtype="int32")
                 barsConnLocal[:, 0] = np.arange(nNode - 1)
                 barsConnLocal[:, 1] = barsConnLocal[:, 0] + 1
 
                 # now increment by the last node count
-                if barsConn.shape[0] > 0:
-                    barsConnLocal += barsConn[-1, 1] + 1
+                barsConnLocal += nodes.shape[0]
+
+                # first vstack the nodes
+                nodes = np.vstack((nodes, blockNodes))
 
                 # finally, vstack with barsConn
                 barsConn = np.vstack((barsConn, barsConnLocal))

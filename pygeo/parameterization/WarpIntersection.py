@@ -40,6 +40,7 @@ class WarpedIntersection:
         blendOrder,
         debug,
         dtype,
+        idx,
     ):
         """
         Class to store information required for an intersection.
@@ -53,12 +54,13 @@ class WarpedIntersection:
 
         # Flag for debug ouput
         self.debug = debug
+        self.idx = idx
 
         # same communicator with DVGeo
         self.comm = DVGeo.comm
         self.curConfigText = ""
 
-        self.name = f"{compA}_{compB}_int"
+        self.name = f"{compA}_{compB}_{self.idx}_int_{self.idx}"
         self.debug_dir = f"./dvgeomulti_debug_outputs/{self.name}"
         if self.comm.rank == 0 and self.debug:
             Path(self.debug_dir).mkdir(parents=True, exist_ok=True)
@@ -118,8 +120,8 @@ class WarpedIntersection:
 
         # add the intersection curve to each component dvgeos separately
         if not self.pointsAdded:
-            self.compAIntName = f"{self.name}_int_coords_A"
-            self.compBIntName = f"{self.name}_int_coords_B"
+            self.compAIntName = f"{self.name}_{self.idx}_int_coords_A"
+            self.compBIntName = f"{self.name}_{self.idx}_int_coords_B"
             self.compA.DVGeo.addPointSet(self.seam0.copy(), self.compAIntName)
             self.compB.DVGeo.addPointSet(self.seam0.copy(), self.compBIntName)
             self.pointsAdded = True
@@ -175,11 +177,19 @@ class WarpedIntersection:
             halfdStar = dStar / 2.0
 
             if d[i] < dStar:
-                # TODO update this to add a const buffer
-                if d[i] < halfdStar:
-                    factor = 0.5 * (d[i] / halfdStar) ** self.blendOrder
-                else:
-                    factor = 0.5 * (2 - ((dStar - d[i]) / halfdStar) ** self.blendOrder)
+                x = d[i] / dStar
+                x3 = x * x * x
+                x4 = x3 * x
+                x5 = x4 * x
+                factor = 10 * x3 - 15 * x4 + 6 * x5
+
+                # # TODO update this to add a const buffer ?
+                # if d[i] < halfdStar:
+                #     factor = 0.5 * (d[i] / halfdStar) ** self.blendOrder
+                # else:
+                #     factor = 0.5 * (2 - ((dStar - d[i]) / halfdStar) ** self.blendOrder)
+
+                # TODO save the nearest n elements?
 
                 # Save the index and factor
                 indices.append(i)
@@ -199,7 +209,6 @@ class WarpedIntersection:
 
 
     def update(self, ptSetName, delta):
-        # TODO
         """Update the delta in ptSetName with our correction. The delta need
         to be supplied as we will be changing it and returning them
         """
@@ -219,15 +228,11 @@ class WarpedIntersection:
         conn = self.seamConn
 
         # deltas for each point (nNode, 3) in size
-        # we actually flip this around here. for points on compA, we use the compB deltas, and vice versa
-        drA = self.seamB - self.seam0
-        drB = self.seamA - self.seam0
-
-        if self.comm.rank == 0:
-            print("dra", np.linalg.norm(drA), np.max(np.abs(drA)))
-            print("drb", np.linalg.norm(drB), np.max(np.abs(drB)))
+        drA = self.seamA - self.seam0
+        drB = self.seamB - self.seam0
 
         # Get the two end points for the line elements
+        # TODO potentially update this so that every point only considers a subset of the conn array which is the nearest N elements?
         r0 = coor[conn[:, 0]]
         r1 = coor[conn[:, 1]]
 
@@ -254,12 +259,14 @@ class WarpedIntersection:
             j = indices[i]
 
             # figure out which components delta we will use
+            # we flip this around here.
+            # for points on compA, we use the compB deltas, and vice versa
             if j in compMap[self.compA.name]:
-                dr0 = dr0A
-                dr1 = dr1A
-            else:
                 dr0 = dr0B
                 dr1 = dr1B
+            else:
+                dr0 = dr0A
+                dr1 = dr1A
 
             # coordinates of the original point
             rp = pts[j]
@@ -312,29 +319,27 @@ class WarpedIntersection:
 
             # Now the delta is replaced by 1-factor times the weighted
             # interp of the seam * factor of the original:
-            # delta[j] = factors[i] * delta[j] + (1 - factors[i]) * interp
-            # delta[j] += factors[i] * delta[j] + (1 - factors[i]) * interp
             delta[j] += (1 - factors[i]) * interp
 
         return delta
 
     def sens(self, dIdPt, ptSetName, comm, config):
-        # TODO
         # Return the reverse accumulation of dIdpt on the seam
         # nodes. Also modifies the dIdp array accordingly.
 
         # original coordinates of the added pointset
-        pts = self.points[ptSetName][0]
+        pts = self.points[ptSetName]["pts"]
         # indices of the points that get affected by this intersection
-        indices = self.points[ptSetName][1]
+        indices = self.points[ptSetName]["indices"]
         # factors for each node in pointSet
-        factors = self.points[ptSetName][2]
+        factors = self.points[ptSetName]["factors"]
+        # compMap for these points in the original array
+        compMap = self.points[ptSetName]["compMap"]
 
         # coordinates for the remeshed curves
         # we use the initial seam coordinates here
         coor = self.seam0
-        # bar connectivity for the remeshed elements
-        conn = self.seamConnWarp
+        conn = self.seamConn
 
         # Get the two end points for the line elements
         r0 = coor[conn[:, 0]]
@@ -353,15 +358,20 @@ class WarpedIntersection:
 
         # if we are handling more than one function,
         # seamBar will contain the seeds for each function separately
-        seamBar = np.zeros((dIdPt.shape[0], self.seam0.shape[0], self.seam0.shape[1]))
-
-        # if we have the projection flag, then we need to add the contribution to seamBar from that
-        if self.projectFlag:
-            seamBar += self.seamBarProj[ptSetName]
+        seamABar = np.zeros((dIdPt.shape[0], self.seam0.shape[0], self.seam0.shape[1]))
+        seamBBar = np.zeros((dIdPt.shape[0], self.seam0.shape[0], self.seam0.shape[1]))
 
         for i in range(len(factors)):
             # j is the index of the point in the full set we are working with.
             j = indices[i]
+
+            # figure out which components delta we will use
+            # we flip this around here.
+            # for points on compA, we use the compB deltas, and vice versa
+            if j in compMap[self.compA.name]:
+                seamBar = seamABar
+            else:
+                seamBar = seamBBar
 
             # coordinates of the original point
             rp = pts[j]
@@ -398,9 +408,6 @@ class WarpedIntersection:
                 # This is the local seed (well the 3 seeds for the point)
                 localVal = dIdPt[k, j, :] * (1 - factors[i])
 
-                # Scale the dIdpt by the factor..dIdpt is input/output
-                dIdPt[k, j, :] *= factors[i]
-
                 # do each direction separately
                 for iDim in range(3):
                     # seeds for the r0 point
@@ -412,7 +419,7 @@ class WarpedIntersection:
         # seamBar is the bwd seeds for the intersection curve...
         # it is N,nseampt,3 in size
         # now call the reverse differentiated seam computation
-        compSens = self._getIntersectionSeam_b(seamBar, comm, config)
+        compSens = self._getIntersectionSeam_b(seamABar, seamBBar, comm, config)
 
         return compSens
 
@@ -433,3 +440,28 @@ class WarpedIntersection:
             self.counter += 1
 
         return
+
+    def _getIntersectionSeam_b(self, seamABar, seamBBar, comm, config):
+        # we get the seeds on the two copies of the seam. run these through the respective DVGeos and return the final dictionary
+
+        # get the total sensitivities from both components
+        compSens_local = {}
+        compSensA = self.compA.DVGeo.totalSensitivity(seamABar, self.compAIntName, config=config)
+        for k, v in compSensA.items():
+            compSens_local[k] = v
+
+        compSensB = self.compB.DVGeo.totalSensitivity(seamBBar, self.compBIntName, config=config)
+        for k, v in compSensB.items():
+            compSens_local[k] = v
+
+        # finally sum the results across procs if we are provided with a comm
+        if comm:
+            compSens = {}
+            # because the results are in a dictionary, we need to loop over the items and sum
+            for k, v in compSens_local.items():
+                compSens[k] = comm.allreduce(v, op=MPI.SUM)
+        else:
+            # we can just pass the dictionary
+            compSens = compSens_local
+
+        return compSens

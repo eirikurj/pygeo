@@ -47,8 +47,10 @@ class ComponentIntersection:
         excludeSurfaces,
         remeshBwd,
         anisotropy,
+        blendOrder,
         debug,
         dtype,
+        idx,
     ):
         """
         Class to store information required for an intersection.
@@ -63,11 +65,17 @@ class ComponentIntersection:
         # Flag for debug ouput
         self.debug = debug
 
+        # index to use in names
+        self.idx = idx
+
+        # blend type
+        self.blendOrder = blendOrder
+
         # same communicator with DVGeo
         self.comm = DVGeo.comm
         self.curConfigText = ""
 
-        self.name = f"{compA}_{compB}_int"
+        self.name = f"{compA}_{compB}_int_{self.idx}"
         self.debug_dir = f"./dvgeomulti_debug_outputs/{self.name}"
         if self.comm.rank == 0 and self.debug:
             Path(self.debug_dir).mkdir(parents=True, exist_ok=True)
@@ -214,15 +222,15 @@ class ComponentIntersection:
                 mdir = abs(marchDirs[ii]) - 1
                 msign = np.sign(marchDirs[ii])
 
-                print(f"[{self.comm.rank}] {self.name} checking feature curve ii={ii}")
+                # print(f"[{self.comm.rank}] {self.name} checking feature curve ii={ii}")
 
                 elem_deltas = curveNodes[newConn[:, 1]][mdir] - curveNodes[newConn[:, 0]][mdir]
-                print(f"[{self.comm.rank}]", elem_deltas, np.average(elem_deltas))
-                print(f"[{self.comm.rank}] {curveNodes[newConn[0][0]]} {curveNodes[newConn[0][1]]} ")
+                # print(f"[{self.comm.rank}]", elem_deltas, np.average(elem_deltas))
+                # print(f"[{self.comm.rank}] {curveNodes[newConn[0][0]]} {curveNodes[newConn[0][1]]} ")
 
                 # check if we need to flip
                 if msign * curveNodes[newConn[0][0]][mdir] > msign * curveNodes[newConn[0][1]][mdir]:
-                    print(f"[{self.comm.rank}] {self.name} flipping curve {ii}")
+                    # print(f"[{self.comm.rank}] {self.name} flipping curve {ii}")
                     # flip on both axes
                     newConn = np.flip(newConn, axis=0)
                     newConn = np.flip(newConn, axis=1)
@@ -315,11 +323,10 @@ class ComponentIntersection:
             halfdStar = dStar / 2.0
 
             if d[i] < dStar:
-                # Compute the factor
                 if d[i] < halfdStar:
-                    factor = 0.5 * (d[i] / halfdStar) ** 3
+                    factor = 0.5 * (d[i] / halfdStar) ** self.blendOrder
                 else:
-                    factor = 0.5 * (2 - ((dStar - d[i]) / halfdStar) ** 3)
+                    factor = 0.5 * (2 - ((dStar - d[i]) / halfdStar) ** self.blendOrder)
 
                 # Save the index and factor
                 indices.append(i)
