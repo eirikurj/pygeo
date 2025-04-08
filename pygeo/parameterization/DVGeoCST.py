@@ -26,6 +26,7 @@ if MPI.COMM_WORLD.rank == 0:
     try:
         # External modules
         import matplotlib.pyplot as plt
+
         pltImport = True
     except ImportError:
         # Do nothing, just continue as pltImport should be at its default value
@@ -1249,6 +1250,7 @@ class DVGeometryCST(BaseDVGeometry):
     @staticmethod
     def plotCST(upperCoeff, lowerCoeff, yUpperTE=0.0, yLowerTE=0.0, N1=0.5, N2=1.0, nPts=100, ax=None, **kwargs):
         """Simple utility to generate a plot from CST coefficients.
+        Should only be called on a single processor.
 
         Parameters
         ----------
