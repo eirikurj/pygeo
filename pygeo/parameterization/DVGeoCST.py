@@ -20,14 +20,6 @@ try:
 except ImportError:
     prefoilInstalled = False
 
-try:
-    # External modules
-    import matplotlib.pyplot as plt
-
-    pltImport = True
-except ImportError:
-    pltImport = False
-
 # Local modules
 from .BaseDVGeo import BaseDVGeometry
 from .designVars import cstDV
@@ -116,8 +108,15 @@ class DVGeometryCST(BaseDVGeometry):
             self.dtype = float
             self.dtypeMPI = MPI.DOUBLE
         self.debug = debug
-        if debug and not pltImport:
-            raise ImportError("matplotlib.pyplot could not be imported and is required for DVGeoCST debug mode")
+        if debug:
+            # Only import matplotlib on root proc.
+            if self.comm.rank == 0:
+                try:
+                    # External modules
+                    import matplotlib.pyplot as plt
+                except ImportError:
+                    print("matplotlib.pyplot could not be imported and is required for DVGeoCST debug mode")
+
 
         # Error check the numCST input
         if isinstance(numCST, int):
@@ -1273,8 +1272,10 @@ class DVGeometryCST(BaseDVGeometry):
         matplotlib Axes
             Axes with airfoil plotted
         """
-        if not pltImport:
-            raise ImportError("matplotlib could not be imported and is required for plotCST")
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            print("matplotlib.pyplot could not be imported and is required for DVGeoCST plotting")
 
         if ax is None:
             _ = plt.figure()
