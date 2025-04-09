@@ -110,10 +110,12 @@ class DVGeometryCST(BaseDVGeometry):
         self.debug = debug
         if debug:
             # Only import matplotlib on root proc.
+            self.plt = None
             if self.comm.rank == 0:
                 try:
                     # External modules
                     import matplotlib.pyplot as plt
+                    self.plt = plt
                 except ImportError:
                     print("matplotlib.pyplot could not be imported and is required for DVGeoCST debug mode")
 
@@ -376,27 +378,27 @@ class DVGeometryCST(BaseDVGeometry):
                 # Reshape the flatted coordinates
                 coords = dataGlob["points"].reshape((dataGlob["points"].size // 3, 3))
 
-                fig = plt.figure()
-                plt.scatter(
+                fig = self.plt.figure()
+                self.plt.scatter(
                     coords[:, self.xIdx][dataGlob["upper"]],
                     coords[:, self.yIdx][dataGlob["upper"]],
                     c="b",
                 )
-                plt.scatter(
+                self.plt.scatter(
                     coords[:, self.xIdx][dataGlob["lower"]],
                     coords[:, self.yIdx][dataGlob["lower"]],
                     c="r",
                 )
-                plt.scatter(
+                self.plt.scatter(
                     coords[:, self.xIdx],
                     coords[:, self.yIdx],
                     s=3,
                     c="k",
                     zorder=3,
                 )
-                plt.legend(["Upper", "Lower"])
-                plt.show()
-                plt.close(fig)
+                self.plt.legend(["Upper", "Lower"])
+                self.plt.show()
+                self.plt.close(fig)
 
             self.comm.Barrier()
 
@@ -1245,6 +1247,7 @@ class DVGeometryCST(BaseDVGeometry):
     @staticmethod
     def plotCST(upperCoeff, lowerCoeff, yUpperTE=0.0, yLowerTE=0.0, N1=0.5, N2=1.0, nPts=100, ax=None, **kwargs):
         """Simple utility to generate a plot from CST coefficients.
+        Should only be called on a single processor.
 
         Parameters
         ----------

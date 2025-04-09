@@ -812,6 +812,35 @@ class TestErrorChecking(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.DVGeo.setDesignVars({"mafa": np.array([1.0, 3.0])})
 
+class TestPlotFunctionalityMPI(unittest.TestCase):
+    N_PROCS = 2
+    """
+    Test matplotlib and plotting are imported correctly with MPI.
+    """
+
+    def test_matplotlibImportMPI(self):
+        # Check we can import in debug mode
+        gcomm = MPI.COMM_WORLD
+        worldRank = gcomm.rank
+        worldSize = gcomm.size
+
+        # Just do a crude split into two comms
+        color = 0 if worldRank < worldSize//2 else 1
+        comm = gcomm.Split(color, worldRank)
+
+        datFile = os.path.join(inputDir, "naca0012_closed.dat")
+        DVGeo = DVGeometryCST(datFile, comm=comm, debug=True)
+        # Uncomment to run the following locally
+        # DVGeo.addPointSet(np.array([[0.1, 0.0, 0.0], [0.2, 0.0, 0.0]]), "test")
+
+    def test_plotCSTMPI(self):
+        # Plotting should only be called on the root proc.
+        # If called  Otherwise raise an import error.
+        comm = MPI.COMM_WORLD
+        if comm.rank == 0:
+            DVGeometryCST.plotCST(np.ones(4), np.ones(3), 1e-3, 1e-3)
+
+
 
 if __name__ == "__main__":
     unittest.main()
