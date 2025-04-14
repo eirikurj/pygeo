@@ -1117,7 +1117,7 @@ class DVConstraints:
         # determine the seed points for the constraint
         if nSpan == -1:
             nSpan = len(leList)
-            X = leList.copy()
+            X = np.array(leList)
         else:
             constr_line = Curve(X=leList, k=2)
             s = np.linspace(0, 1, nSpan)
@@ -1819,6 +1819,7 @@ class DVConstraints:
         surfaceName="default",
         DVGeoName="default",
         compNames=None,
+        ptSetKwargs=None,
     ):
         r"""
         Add a single volume constraint to the wing. The volume
@@ -1946,6 +1947,9 @@ class DVConstraints:
         else:
             conName = name
 
+        if ptSetKwargs is None:
+            ptSetKwargs = {}
+
         coords = self._generateIntersections(leList, teList, nSpan, nChord, surfaceName)
 
         # Get the total number of spanwise sections
@@ -1966,6 +1970,7 @@ class DVConstraints:
             self.DVGeometries[DVGeoName],
             addToPyOpt,
             compNames,
+            ptSetKwargs,
         )
 
     def addCompositeVolumeConstraint(
