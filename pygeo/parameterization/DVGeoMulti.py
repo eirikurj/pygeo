@@ -137,7 +137,7 @@ class DVGeometryMulti:
             procNodes = nodes[disp[self.comm.rank] : disp[self.comm.rank + 1]]
 
             # Add these points to the component DVGeo
-            DVGeo.addPointSet(procNodes, "triMesh", **pointSetKwargs)
+            DVGeo.addPointSet(procNodes, f"triMesh_{comp}", **pointSetKwargs)
         else:
             # the user has not provided a triangulated surface mesh for this file
             nodes = None
@@ -164,7 +164,7 @@ class DVGeometryMulti:
             xMax[2] = bbox["zmax"]
 
         # initialize the component object
-        self.comps[comp] = component(comp, DVGeo, nodes, triConn, triConnStack, barsConn, xMin, xMax, triMeshData)
+        self.comps[comp] = component(comp, DVGeo, nodes, triConn, triConnStack, barsConn, xMin, xMax, triMeshData, pointSetKwargs)
 
         # add the name to the list
         self.compNames.append(comp)
@@ -1107,7 +1107,7 @@ class DVGeometryMulti:
 
 
 class component:
-    def __init__(self, name, DVGeo, nodes, triConn, triConnStack, barsConn, xMin, xMax, triMeshData):
+    def __init__(self, name, DVGeo, nodes, triConn, triConnStack, barsConn, xMin, xMax, triMeshData, pointSetKwargs):
         # save the info
         self.name = name
         self.DVGeo = DVGeo
@@ -1118,6 +1118,7 @@ class component:
         self.xMin = xMin
         self.xMax = xMax
         self.triMeshData = triMeshData
+        self.pointSetKwargs = pointSetKwargs
 
         # also a dictionary for DV names
         self.dvDict = {}
@@ -1128,7 +1129,19 @@ class component:
         else:
             self.triMesh = True
 
+        self.triMeshAdded = False
+        self.triMeshName = f"triMesh_{name}"
+
+    def addTriMeshPoints(self, comm):
+        disp = self.triMeshData["disp"]
+        procNodes = self.nodes[disp[comm.rank] : disp[comm.rank + 1]]
+        self.DVGeo.addPointSet(procNodes, self.triMeshName, **self.pointSetKwargs)
+
     def updateTriMesh(self, comm, config):
+        if not self.triMeshAdded:
+            self.addTriMeshPoints(comm)
+            self.triMeshAdded = True
+
         # We need the full triangulated surface for this component
         # Get the stored processor splitting information
         sizes = self.triMeshData["sizes"]
@@ -1136,7 +1149,7 @@ class component:
         nPts = disp[-1]
 
         # Update the triangulated surface mesh to get the points on this processor
-        procNodes = self.DVGeo.update("triMesh", config=config)
+        procNodes = self.DVGeo.update(self.triMeshName, config=config)
 
         # Create the send buffer
         procNodes = procNodes.flatten()
