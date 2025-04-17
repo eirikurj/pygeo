@@ -1073,7 +1073,7 @@ class ComponentIntersection:
         dIdptTriA = dIdptTriA[:, disp[self.comm.rank] : disp[self.comm.rank + 1], :]
 
         # Call the total sensitivity of the component's DVGeo
-        compSensA = self.compA.DVGeo.totalSensitivity(dIdptTriA, "triMesh", config=config)
+        compSensA = self.compA.DVGeo.totalSensitivity(dIdptTriA, self.compA.triMeshName, config=config)
 
         for k, v in compSensA.items():
             compSens_local[k] = v
@@ -1105,7 +1105,7 @@ class ComponentIntersection:
         dIdptTriB = self.comm.allreduce(dIdptTriB)
         disp = self.compB.triMeshData["disp"]
         dIdptTriB = dIdptTriB[:, disp[self.comm.rank] : disp[self.comm.rank + 1], :]
-        compSensB = self.compB.DVGeo.totalSensitivity(dIdptTriB, "triMesh", config=config)
+        compSensB = self.compB.DVGeo.totalSensitivity(dIdptTriB, self.compB.triMeshName, config=config)
         for k, v in compSensB.items():
             compSens_local[k] = v
 
@@ -2307,11 +2307,11 @@ class ComponentIntersection:
 
         # get the total sensitivities from both components
         compSens_local = {}
-        compSensA = self.compA.DVGeo.totalSensitivity(coorAb, "triMesh", config=config)
+        compSensA = self.compA.DVGeo.totalSensitivity(coorAb, self.compA.triMeshName, config=config)
         for k, v in compSensA.items():
             compSens_local[k] = v
 
-        compSensB = self.compB.DVGeo.totalSensitivity(coorBb, "triMesh", config=config)
+        compSensB = self.compB.DVGeo.totalSensitivity(coorBb, self.compB.triMeshName, config=config)
         for k, v in compSensB.items():
             compSens_local[k] = v
 
